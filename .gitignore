@@ -74,8 +74,15 @@ target/
 # pyenv
 .python-version
 
-# celery beat schedule file
+# pipenv
+Pipfile.lock
+
+# PEP 582
+__pypackages__/
+
+# Celery stuff
 celerybeat-schedule
+celerybeat.pid
 
 # SageMath parsed files
 *.sage.py
@@ -104,13 +111,37 @@ venv.bak/
 .dmypy.json
 dmypy.json
 
-# IDE
+# Pyre type checker
+.pyre/
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Frontend build files
+federated-learning-platform/dist/
+federated-learning-platform/build/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# IDE files
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
-# OS
+# OS generated files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
