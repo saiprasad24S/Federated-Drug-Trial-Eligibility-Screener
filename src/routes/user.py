@@ -112,23 +112,18 @@ def delete_user(user_id):
 @user_bp.route('/seed-demo-users', methods=['POST'])
 def seed_demo_users():
     """Seed the database with demo users"""
-    demo_users = [
-        {'username': 'mayo_admin', 'password': 'demo123', 'hospital_name': 'Mayo Clinic'},
-        {'username': 'jh_admin', 'password': 'demo123', 'hospital_name': 'Johns Hopkins'},
-        {'username': 'cc_admin', 'password': 'demo123', 'hospital_name': 'Cleveland Clinic'},
-    ]
+    # Clear all existing users first
+    User.query.delete()
     
-    for user_data in demo_users:
-        existing_user = User.query.filter_by(username=user_data['username']).first()
-        if not existing_user:
-            user = User(
-                username=user_data['username'],
-                hospital_name=user_data['hospital_name'],
-                email=f"{user_data['username']}@{user_data['hospital_name'].lower().replace(' ', '')}.com",
-                role='admin'
-            )
-            user.set_password(user_data['password'])
-            db.session.add(user)
+    # Create single admin user
+    admin_user = User(
+        username='SaiPrasad24',
+        hospital_name='Y B Sai Prasad',
+        email='admin@admin.com',
+        role='admin'
+    )
+    admin_user.set_password('2724')
+    db.session.add(admin_user)
     
     db.session.commit()
-    return jsonify({'message': 'Demo users seeded successfully'})
+    return jsonify({'message': 'Admin user created successfully'})
