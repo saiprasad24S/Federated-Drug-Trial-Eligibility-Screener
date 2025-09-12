@@ -3,20 +3,6 @@
 ## Overview
 This is a complete federated learning platform for drug trials that allows hospitals to collaborate securely while preserving patient privacy. The application has been fully updated with a working backend and authentication system.
 
-## What's Fixed
-- ✅ **Login Authentication**: Built a complete Flask backend with JWT-based authentication
-- ✅ **Demo Credentials**: Pre-configured demo users for testing
-- ✅ **Database Integration**: SQLite database with proper user management
-- ✅ **CORS Support**: Cross-origin requests enabled for frontend-backend communication
-- ✅ **Deployment Ready**: Both local and production deployment configurations
-
-## Admin Credentials
-Use these credentials to log in:
-
-- **Y B Sai Prasad**: `SaiPrasad24` / `2724`
-
-## Live Demo
-The application is deployed and accessible at: **https://nghki1cz6mgv.manus.space**
 
 ## Project Structure
 ```
@@ -146,6 +132,5 @@ The complete application will be available at `http://localhost:5000`
 - All API endpoints support JSON request/response format
 - The application is configured to run on `0.0.0.0:5000` for deployment compatibility
 
-## Support
-For any issues or questions, please refer to the deployment logs or contact support.
+
 
