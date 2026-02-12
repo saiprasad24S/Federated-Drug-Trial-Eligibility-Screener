@@ -8,3 +8,5 @@ pandas
 scikit-learn
 eth-account
 PyPDF2
+motor
+pymongo[srv]

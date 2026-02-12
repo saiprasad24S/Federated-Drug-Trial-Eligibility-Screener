@@ -1,32 +1,5 @@
 import React, { useState } from 'react';
-
-// Hospital credentials database
-const HOSPITAL_CREDENTIALS = [
-  {
-    username: 'SaiPrasad24S',
-    password: '2724',
-    hospital_name: 'Sai Prasad Medical Center',
-    email: 'admin@saiprasad.com'
-  },
-  {
-    username: 'apollo',
-    password: 'apollo@123',
-    hospital_name: 'Apollo Hospitals',
-    email: 'admin@apollo.com'
-  },
-  {
-    username: 'fortis',
-    password: 'fortis@123',
-    hospital_name: 'Fortis Healthcare',
-    email: 'admin@fortis.com'
-  },
-  {
-    username: 'max',
-    password: 'max@123',
-    hospital_name: 'Max Super Specialty Hospital',
-    email: 'admin@maxhealthcare.com'
-  }
-];
+import { apiService } from '../services/apiService';
 
 export default function LoginPage({ onLogin }) {
   const [username, setUsername] = useState('');
@@ -46,24 +19,10 @@ export default function LoginPage({ onLogin }) {
       return;
     }
 
-    // Authenticate against hospital credentials
+    // Authenticate against backend API (MongoDB)
     try {
-      const hospital = HOSPITAL_CREDENTIALS.find(
-        h => h.username === username && h.password === password
-      );
-
-      if (!hospital) {
-        setError('Invalid username or password');
-        setLoading(false);
-        return;
-      }
-
-      const user = {
-        username: hospital.username,
-        hospital_name: hospital.hospital_name,
-        role: 'admin',
-        email: hospital.email,
-      };
+      const result = await apiService.login(username, password);
+      const user = result.user;
       
       // Store user in localStorage
       localStorage.setItem('user', JSON.stringify(user));
@@ -72,7 +31,7 @@ export default function LoginPage({ onLogin }) {
       // Call parent handler
       onLogin(user);
     } catch (err) {
-      setError('Login failed. Please try again.');
+      setError(err.message || 'Login failed. Please try again.');
     } finally {
       setLoading(false);
     }

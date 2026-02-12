@@ -15,6 +15,24 @@ from datetime import datetime
 from typing import Dict, Any, Optional, Tuple
 from dotenv import load_dotenv
 
+# MongoDB persistence helper (imported lazily to avoid circular imports)
+_db_module = None
+
+def _get_db():
+    """Lazily import the database module."""
+    global _db_module
+    if _db_module is None:
+        try:
+            import sys, importlib
+            # Ensure the parent package is on the path
+            parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            if parent_dir not in sys.path:
+                sys.path.insert(0, parent_dir)
+            _db_module = importlib.import_module("database")
+        except Exception:
+            _db_module = False  # mark as unavailable
+    return _db_module if _db_module else None
+
 # Load environment variables
 load_dotenv()
 
@@ -49,23 +67,53 @@ logger = _make_logger()
 
 
 class MockBlockchainLogger:
-    """In-memory mock logger used when blockchain is unavailable.
+    """Mock logger used when blockchain is unavailable.
 
     Useful for development and tests; keeps raw metadata off-chain.
     Supports both training-round logs and general audit event logs.
+    All logs are persisted to MongoDB.
     """
 
     def __init__(self) -> None:
-        self._logs = []          # training round logs (legacy)
-        self._audit_logs = []    # general audit trail (all actions)
+        self._logs = []          # training round logs (in-memory cache)
+        self._audit_logs = []    # general audit trail (in-memory cache)
         self.is_mock = True
+        self._lock = threading.Lock()
+        self._db_module = None   # Lazy-loaded database module for MongoDB
         logger.info("Using mock blockchain logger - no real blockchain connection")
+
+        # Import database module for MongoDB persistence
+        try:
+            import database as _db
+            self._db_module = _db
+            logger.info("MongoDB persistence: enabled (all logs stored in MongoDB)")
+        except ImportError:
+            logger.warning("MongoDB persistence: DISABLED (database module not available)")
+
         class _MockW3:
             def is_connected(self_inner):
                 return False
 
         # Provide minimal `w3` compatibility to avoid attribute errors in callers
         self.w3 = _MockW3()
+
+    def _persist_audit_to_mongo(self, entry: dict) -> None:
+        """Write a single audit log entry to MongoDB (best-effort)."""
+        if self._db_module is None:
+            return
+        try:
+            self._db_module.insert_audit_log_sync(entry)
+        except Exception as e:
+            logger.warning(f"Could not persist audit log to MongoDB: {e}")
+
+    def _persist_training_to_mongo(self, entry: dict) -> None:
+        """Write a single training log entry to MongoDB (best-effort)."""
+        if self._db_module is None:
+            return
+        try:
+            self._db_module.insert_training_log_sync(entry)
+        except Exception as e:
+            logger.warning(f"Could not persist training log to MongoDB: {e}")
 
     def _generate_tx_hash(self, seed: str = "") -> str:
         """Generate a realistic-looking mock transaction hash."""
@@ -75,7 +123,9 @@ class MockBlockchainLogger:
     def enqueue(self, payload: Dict[str, Any]) -> str:
         ts = int(time.time())
         entry = {**payload, "timestamp": payload.get("timestamp", ts)}
-        self._logs.append(entry)
+        with self._lock:
+            self._logs.append(entry)
+        self._persist_training_to_mongo(entry)
         logger.info(f"Mock enqueued round {entry.get('round_number')}")
         return f"mock_tx_{entry.get('round_number')}_{ts}"
 
@@ -91,17 +141,20 @@ class MockBlockchainLogger:
                 "timestamp": ts,
                 "txHash": tx_hash,
             }
-            self._logs.append(entry)
-            # Also add to the audit trail
-            self._audit_logs.append({
-                "action": "TRAINING_ROUND",
-                "details": f"Round {round_number} completed — accuracy {accuracy:.4f}",
-                "actor": "FL Server",
-                "record_count": 1,
-                "timestamp": ts,
-                "txHash": tx_hash,
-                "metadata": {"round": round_number, "accuracy": accuracy, "model_hash": model_hash},
-            })
+            audit_entry = {
+                    "action": "TRAINING_ROUND",
+                    "details": f"Round {round_number} completed — accuracy {accuracy:.4f}",
+                    "actor": "FL Server",
+                    "record_count": 1,
+                    "timestamp": ts,
+                    "txHash": tx_hash,
+                    "metadata": {"round": round_number, "accuracy": accuracy, "model_hash": model_hash},
+                }
+            with self._lock:
+                self._logs.append(entry)
+                self._audit_logs.append(audit_entry)
+            self._persist_training_to_mongo(entry)
+            self._persist_audit_to_mongo(audit_entry)
             logger.info(f"Mock enqueued training metadata for round {round_number}")
             return True, tx_hash
         except Exception as e:
@@ -122,7 +175,9 @@ class MockBlockchainLogger:
             "txHash": tx_hash,
             "metadata": metadata or {},
         }
-        self._audit_logs.append(entry)
+        with self._lock:
+            self._audit_logs.append(entry)
+        self._persist_audit_to_mongo(entry)
         logger.info(f"Mock audit log: {action} — {details}")
         return tx_hash
 
@@ -149,11 +204,13 @@ class MockBlockchainLogger:
         )
 
     def get_logs(self) -> list:
-        return list(self._logs)
+        with self._lock:
+            return list(self._logs)
 
     def get_audit_logs(self) -> list:
         """Return all audit trail entries, newest first."""
-        return list(reversed(self._audit_logs))
+        with self._lock:
+            return list(reversed(self._audit_logs))
 
     def get_log_count(self) -> int:
         return len(self._logs)

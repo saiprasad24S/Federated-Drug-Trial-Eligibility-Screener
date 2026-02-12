@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { apiService } from '../services/apiService';
 import { blockchainService } from '../services/blockchainService';
 
-export function useBlockchainLogs(enabled = false, pollInterval = 5000) {
+export function useBlockchainLogs(enabled = false, pollInterval = 2000) {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -12,8 +12,10 @@ export function useBlockchainLogs(enabled = false, pollInterval = 5000) {
     try {
       const backendLogs = await apiService.getBlockchainLogs();
       setLogs(Array.isArray(backendLogs) ? backendLogs : []);
+      setLoading(false);
     } catch (err) {
       setError(err);
+      setLoading(false);
     }
   }, []);
 
@@ -47,11 +49,14 @@ export function useBlockchainLogs(enabled = false, pollInterval = 5000) {
   }, []);
 
   const refresh = useCallback(async () => {
+    // Backend is the primary fast source — fetch it first and update immediately
     await fetchFromBackend();
-    await fetchFromChain();
+    // On-chain is supplementary, fetch in background (non-blocking)
+    fetchFromChain().catch(() => {});
   }, [fetchFromBackend, fetchFromChain]);
 
   useEffect(() => {
+    if (!enabled) return;
     let mounted = true;
     (async () => {
       try {
@@ -67,7 +72,7 @@ export function useBlockchainLogs(enabled = false, pollInterval = 5000) {
     return () => {
       mounted = false;
     };
-  }, [refresh]);
+  }, [refresh, enabled]);
 
   useEffect(() => {
     if (!enabled) {
@@ -77,6 +82,9 @@ export function useBlockchainLogs(enabled = false, pollInterval = 5000) {
       }
       return;
     }
+
+    // Do an immediate fetch when tab becomes active
+    refresh();
 
     intervalRef.current = setInterval(() => {
       refresh();

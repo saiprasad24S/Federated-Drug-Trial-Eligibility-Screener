@@ -3,6 +3,20 @@ import axios from 'axios';
 const API_BASE_URL = 'http://localhost:8002';
 
 export const apiService = {
+  // Login to the backend (MongoDB-backed authentication)
+  login: async (username, password) => {
+    try {
+      const response = await axios.post(`${API_BASE_URL}/auth/login`, { username, password });
+      return response.data;
+    } catch (error) {
+      if (error.response && error.response.status === 401) {
+        throw new Error('Invalid username or password');
+      }
+      console.error('Error logging in:', error);
+      throw error;
+    }
+  },
+
   // Get fast overview stats (no heavy data transfer)
   getStats: async () => {
     try {
