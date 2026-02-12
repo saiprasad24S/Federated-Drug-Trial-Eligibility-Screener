@@ -13,6 +13,13 @@ const renderCell = (value, key) => {
   if (key === 'blood_group') return <span className="px-2 py-0.5 rounded text-xs font-semibold bg-indigo-100 text-indigo-800">{value}</span>;
   if (key === 'stage') return <span className="px-2 py-0.5 rounded text-xs font-semibold bg-gray-200 text-gray-700">{value}</span>;
   if (key === 'gender') return <span className="px-2 py-0.5 rounded text-xs font-semibold bg-purple-100 text-purple-800">{value}</span>;
+  if (key === 'phone') return <span className="text-blue-700 font-mono text-xs">{value}</span>;
+  if (key === 'email') return <span className="text-blue-600 underline text-xs truncate max-w-[180px] inline-block">{value}</span>;
+  if (key === 'address') return <span className="text-gray-600 text-xs truncate max-w-[200px] inline-block" title={value}>{value}</span>;
+  if (key === 'emergency_contact') return <span className="text-orange-700 text-xs">{value}</span>;
+  if (key === 'patient_name') return <span className="font-semibold text-gray-900">{value}</span>;
+  if (key === 'hospital') return <span className="px-2 py-0.5 rounded text-xs font-semibold bg-teal-100 text-teal-800">{value}</span>;
+  if (key === 'admission_date' || key === 'diagnosis_date') return <span className="text-gray-600 text-xs font-mono">{value}</span>;
   return String(value);
 };
 
@@ -260,7 +267,7 @@ export default function PatientsManager({ user }) {
 
       <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-800 flex items-start gap-2">
         <svg className="w-5 h-5 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-        <span><strong>Privacy Protected:</strong> This data is visible only to your hospital.</span>
+        <span><strong>Full Patient Records:</strong> All personal &amp; medical details are visible because this is your hospital's own data. This information is never shared with other hospitals or external systems.</span>
       </div>
 
       {/* Upload Form */}

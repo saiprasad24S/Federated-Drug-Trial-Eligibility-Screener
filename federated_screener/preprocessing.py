@@ -42,6 +42,12 @@ except ImportError:
 # ---------------------------------------------------------------------------
 COLUMN_ALIASES = {
     "patient_id": ["patient_id", "patientid", "id", "pid", "patient", "subject_id", "hadm_id", "record_id"],
+    "patient_name": ["patient_name", "patientname", "name", "full_name", "fullname", "first_name"],
+    "phone": ["phone", "phone_number", "mobile", "contact_number", "telephone", "cell"],
+    "email": ["email", "email_address", "e_mail", "emailid"],
+    "address": ["address", "residential_address", "home_address", "street_address", "location"],
+    "emergency_contact": ["emergency_contact", "emergency_phone", "next_of_kin", "guardian_contact", "kin_phone"],
+    "admission_date": ["admission_date", "admit_date", "admittime", "date_of_admission", "admitted_on"],
     "age": ["age", "patient_age", "age_years", "years"],
     "gender": ["gender", "sex", "gender_enc", "male", "female", "m/f"],
     "blood_group": ["blood_group", "bloodgroup", "blood_type", "bloodtype", "blood"],
@@ -49,7 +55,7 @@ COLUMN_ALIASES = {
     "stage": ["stage", "stage_enc", "disease_stage", "cancer_stage", "severity"],
     "comorbidities": ["comorbidities", "comorbidity", "comorbid", "other_conditions", "secondary_diagnosis"],
     "bmi": ["bmi", "body_mass_index", "bodymassindex"],
-    "diagnosis_date": ["diagnosis_date", "date", "admit_date", "admittime", "admission_date", "dx_date"],
+    "diagnosis_date": ["diagnosis_date", "date", "dx_date"],
     "drug": ["drug", "medication", "treatment", "drug_name", "medicine", "therapy", "prescription"],
     "eligible": ["eligible", "eligibility", "is_eligible"],
     "drug_worked": ["drug_worked", "drugworked", "outcome", "response", "effective", "success"],
@@ -58,7 +64,9 @@ COLUMN_ALIASES = {
 
 # Standard columns in output order
 STANDARD_COLUMNS = [
-    "patient_id", "age", "gender", "blood_group", "disease", "stage",
+    "patient_id", "patient_name", "phone", "email", "address",
+    "emergency_contact", "admission_date",
+    "age", "gender", "blood_group", "disease", "stage",
     "comorbidities", "bmi", "diagnosis_date", "drug", "eligible",
     "drug_worked", "hospital"
 ]

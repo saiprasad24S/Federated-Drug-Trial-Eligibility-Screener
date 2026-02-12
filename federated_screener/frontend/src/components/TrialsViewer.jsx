@@ -11,6 +11,7 @@ const renderCell = (value, key) => {
   if (Array.isArray(value)) return value.length ? value.join(', ') : <span className="text-gray-400">None</span>;
   if (key === 'blood_group') return <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-800 rounded text-xs font-semibold">{value}</span>;
   if (key === 'stage') return <span className="px-1.5 py-0.5 bg-gray-200 text-gray-700 rounded text-xs font-semibold">{value}</span>;
+  if (key === 'patient_id' && String(value).startsWith('ANON-')) return <span className="px-1.5 py-0.5 bg-yellow-100 text-yellow-800 rounded text-xs font-mono font-semibold">{value}</span>;
   return String(value);
 };
 
@@ -136,6 +137,15 @@ export default function TrialsViewer({ user }) {
             <p className="text-sm text-gray-500 mt-1">Eligibility check across all current patients</p>
           </div>
 
+          {/* Privacy-preserving banner */}
+          <div className="mb-4 p-3 bg-amber-50 border border-amber-300 rounded-lg text-sm text-amber-900 flex items-start gap-2">
+            <svg className="w-5 h-5 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+            <div>
+              <strong>Privacy-Preserving Mode:</strong> Personal details (name, phone, email, address) are <strong>hidden</strong> in trial screening.
+              Only anonymized IDs and medical/demographic data are shown to protect patient privacy across federated hospitals.
+            </div>
+          </div>
+
           {/* Trial summary */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
             <div className="bg-gray-50 rounded-lg p-3"><p className="text-xs text-gray-500">Disease</p><p className="text-sm font-semibold text-gray-900">{selectedTrial.indication}</p></div>
@@ -218,7 +228,7 @@ export default function TrialsViewer({ user }) {
         {/* Privacy footer */}
         <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800 flex items-start gap-2">
           <svg className="w-5 h-5 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-          <span><strong>Federated Privacy:</strong> Only demographic eligibility parameters are shared across hospitals. Patient IDs shown here are visible only to your hospital.</span>
+          <span><strong>Federated Privacy:</strong> Patient identities are anonymized (ANON-XXXXX). Only age, gender, blood group, disease, stage, BMI, and comorbidities are shared for eligibility screening. No personal information (name, phone, email, address) leaves your hospital.</span>
         </div>
       </div>
     );

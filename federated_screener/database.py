@@ -19,6 +19,7 @@ import logging
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 
+import certifi
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import MongoClient, ASCENDING, DESCENDING
 from pymongo.errors import BulkWriteError
@@ -49,14 +50,14 @@ _sync_client: Optional[MongoClient] = None
 def get_async_client() -> AsyncIOMotorClient:
     global _async_client
     if _async_client is None:
-        _async_client = AsyncIOMotorClient(MONGO_URI)
+        _async_client = AsyncIOMotorClient(MONGO_URI, tlsCAFile=certifi.where())
     return _async_client
 
 
 def get_sync_client() -> MongoClient:
     global _sync_client
     if _sync_client is None:
-        _sync_client = MongoClient(MONGO_URI)
+        _sync_client = MongoClient(MONGO_URI, tlsCAFile=certifi.where())
     return _sync_client
 
 
@@ -324,7 +325,9 @@ async def get_patients_paginated(
             {"gender": regex},
             {"blood_group": regex},
             {"stage": regex},
-            {"admission_type": regex},
+            {"phone": regex},
+            {"email": regex},
+            {"address": regex},
         ]
 
     total = await db.patients.count_documents(query)
@@ -348,16 +351,27 @@ async def get_patients_paginated(
 
     patients = await cursor.to_list(length=page_size)
 
-    # Detect columns from first batch
+    # Detect columns from first batch — enforce preferred order
     columns = []
-    hidden = {"hospital", "eligible", "drug_worked", "drug"}
+    hidden = {"eligible", "drug_worked", "drug"}
+    # Preferred column order: personal details first, then medical
+    PREFERRED_ORDER = [
+        "patient_id", "patient_name", "age", "gender", "phone", "email",
+        "address", "blood_group", "disease", "stage", "comorbidities",
+        "bmi", "diagnosis_date", "admission_date", "emergency_contact",
+        "hospital",
+    ]
     if patients:
-        seen = dict()
+        all_keys = set()
         for p in patients[:20]:
-            for k in p.keys():
-                if k not in seen and k not in hidden:
-                    seen[k] = True
-        columns = list(seen.keys())
+            all_keys.update(k for k in p.keys() if k not in hidden)
+        # Add columns in preferred order first, then any remaining
+        for col in PREFERRED_ORDER:
+            if col in all_keys:
+                columns.append(col)
+                all_keys.discard(col)
+        # Append any extra columns not in the preferred list
+        columns.extend(sorted(all_keys))
 
     return {
         "patients": patients,

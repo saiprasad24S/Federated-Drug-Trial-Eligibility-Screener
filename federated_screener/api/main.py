@@ -306,8 +306,24 @@ async def get_blockchain_logs():
 # ---------------------------------------------------------------------------
 # Patient endpoints — powered by MongoDB
 # ---------------------------------------------------------------------------
-_HIDDEN_COLUMNS = {"hospital", "eligible", "drug_worked", "drug"}
+# Internal/ML fields hidden from ALL views
+_INTERNAL_COLUMNS = {"eligible", "drug_worked", "drug"}
 
+# Personal / identifying fields — shown only in the Patients tab (own hospital)
+_PERSONAL_COLUMNS = [
+    "patient_name", "phone", "email", "address",
+    "emergency_contact", "admission_date",
+]
+
+# Columns shown in the Patients tab (own hospital) — ALL details
+_PATIENT_VIEW_COLUMNS = [
+    "patient_id", "patient_name", "age", "gender", "phone", "email",
+    "address", "blood_group", "disease", "stage", "comorbidities",
+    "bmi", "diagnosis_date", "admission_date", "emergency_contact",
+    "hospital",
+]
+
+# Columns for federated / trials view — privacy-preserving (NO personal info)
 _FEDERATED_COLUMNS = [
     "patient_id", "age", "gender", "blood_group", "disease",
     "stage", "comorbidities", "bmi", "diagnosis_date",
@@ -544,10 +560,13 @@ async def get_eligible_patients_for_drug(
         total_pages = max(1, -(-total_for_tab // page_size))
 
         cols = [c for c in _FEDERATED_COLUMNS if any(c in p for p in page_patients_raw[:5])]
-        page_patients = [
-            {k: p.get(k) for k in cols}
-            for p in page_patients_raw
-        ]
+        # Privacy-preserving: only medical/demographic fields, anonymize patient IDs
+        page_patients = []
+        for idx, p in enumerate(page_patients_raw):
+            row = {k: p.get(k) for k in cols if k != "patient_id"}
+            # Replace real patient_id with anonymous identifier
+            row["patient_id"] = f"ANON-{start + idx + 1:05d}"
+            page_patients.append(row)
 
         return {
             "drug": drug_name,
@@ -561,6 +580,8 @@ async def get_eligible_patients_for_drug(
             "page_size": page_size,
             "total_pages": total_pages,
             "trial_params": trial_params,
+            "privacy_mode": True,
+            "privacy_notice": "Patient identities are anonymized. Only medical and demographic data is shared for trial eligibility screening.",
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
