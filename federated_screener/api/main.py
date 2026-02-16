@@ -82,6 +82,37 @@ training_logs: list = []
 is_training: bool = False
 
 # ---------------------------------------------------------------------------
+# Blockchain audit-log throttle  (prevents spamming on repeated page views)
+# ---------------------------------------------------------------------------
+_audit_last_logged: Dict[str, float] = {}   # action -> last epoch
+_AUDIT_COOLDOWN = 10  # seconds between duplicate action logs
+
+def _should_log_action(action: str, cooldown: float = _AUDIT_COOLDOWN) -> bool:
+    """Return True if enough time has passed since the last log of this action."""
+    now = time.time()
+    last = _audit_last_logged.get(action, 0)
+    if now - last >= cooldown:
+        _audit_last_logged[action] = now
+        return True
+    return False
+
+def _log_audit(action: str, details: str = "", actor: str = "System",
+               record_count: int = 0, metadata: dict = None,
+               cooldown: float = _AUDIT_COOLDOWN) -> None:
+    """Convenience: throttle + fire-and-forget blockchain audit log."""
+    if not blockchain_logger or not hasattr(blockchain_logger, 'log_event'):
+        return
+    if not _should_log_action(action, cooldown):
+        return
+    try:
+        blockchain_logger.log_event(
+            action=action, details=details, actor=actor,
+            record_count=record_count, metadata=metadata,
+        )
+    except Exception:
+        pass
+
+# ---------------------------------------------------------------------------
 # Startup event
 # ---------------------------------------------------------------------------
 @app.on_event("startup")
@@ -93,16 +124,13 @@ async def log_startup_event():
     except Exception:
         patients_count = 0
 
-    if blockchain_logger and hasattr(blockchain_logger, 'log_event'):
-        try:
-            blockchain_logger.log_event(
-                action="SYSTEM_STARTUP",
-                details=f"MedFed API server started with {patients_count} patients loaded",
-                actor="System",
-                record_count=patients_count,
-            )
-        except Exception:
-            pass
+    _log_audit(
+        action="SYSTEM_STARTUP",
+        details=f"FDTES API server started with {patients_count} patients loaded",
+        actor="System",
+        record_count=patients_count,
+        cooldown=0,  # always log startup
+    )
 
     # Also load training logs from MongoDB into memory
     global training_logs
@@ -150,7 +178,20 @@ async def login(request: LoginRequest):
     """Authenticate a hospital user against MongoDB."""
     hospital = await db.authenticate_hospital(request.username, request.password)
     if not hospital:
+        _log_audit(
+            action="LOGIN_FAILED",
+            details=f"Failed login attempt for user '{request.username}'",
+            actor=request.username,
+            cooldown=2,
+        )
         raise HTTPException(status_code=401, detail="Invalid username or password")
+
+    _log_audit(
+        action="USER_LOGIN",
+        details=f"User '{hospital['username']}' logged in from {hospital['hospital_name']}",
+        actor=hospital["username"],
+        cooldown=0,  # always log logins
+    )
 
     return {
         "user": {
@@ -250,6 +291,25 @@ async def get_model_metrics():
         "is_training": is_training
     }
 
+# ---------------------------------------------------------------------------
+# Frontend activity logging — lightweight endpoint for UI-driven events
+# ---------------------------------------------------------------------------
+class ActivityLog(BaseModel):
+    action: str
+    details: str = ""
+    actor: str = "System"
+
+@app.post("/log-activity")
+async def log_activity(entry: ActivityLog):
+    """Log a frontend-initiated activity to the blockchain audit trail."""
+    _log_audit(
+        action=entry.action,
+        details=entry.details,
+        actor=entry.actor,
+        cooldown=5,  # 5s throttle for frontend events
+    )
+    return {"ok": True}
+
 @app.get("/health")
 async def health_check():
     mongo_connected = False
@@ -268,11 +328,21 @@ async def health_check():
     }
 
 # ---------------------------------------------------------------------------
-# Blockchain audit logs — served from MongoDB
+# Blockchain audit logs — served from MongoDB (with response caching)
 # ---------------------------------------------------------------------------
+_blockchain_logs_cache: Dict[str, Any] = {"data": None, "ts": 0}
+_BLOCKCHAIN_CACHE_TTL = 2  # seconds — avoids hitting MongoDB on every poll
+
 @app.get("/blockchain-logs")
 async def get_blockchain_logs():
-    """Return audit trail — merge MongoDB and in-memory mock logger to ensure nothing is lost."""
+    """Return audit trail — merge MongoDB and in-memory mock logger."""
+    now = time.time()
+    if _blockchain_logs_cache["data"] and (now - _blockchain_logs_cache["ts"]) < _BLOCKCHAIN_CACHE_TTL:
+        return JSONResponse(
+            content=_blockchain_logs_cache["data"],
+            headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+        )
+
     all_logs = []
 
     # 1) Try MongoDB
@@ -286,7 +356,6 @@ async def get_blockchain_logs():
     if blockchain_logger and hasattr(blockchain_logger, 'get_audit_logs'):
         try:
             mock_logs = blockchain_logger.get_audit_logs()
-            # Deduplicate by txHash
             existing_hashes = {l.get("txHash") for l in all_logs if l.get("txHash")}
             for log in mock_logs:
                 if log.get("txHash") not in existing_hashes:
@@ -298,8 +367,12 @@ async def get_blockchain_logs():
     # Sort newest first
     all_logs.sort(key=lambda x: x.get("timestamp", 0), reverse=True)
 
+    payload = {"logs": all_logs[:500], "total": len(all_logs)}
+    _blockchain_logs_cache["data"] = payload
+    _blockchain_logs_cache["ts"] = now
+
     return JSONResponse(
-        content={"logs": all_logs[:500], "total": len(all_logs)},
+        content=payload,
         headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
     )
 
@@ -329,14 +402,20 @@ _FEDERATED_COLUMNS = [
     "stage", "comorbidities", "bmi", "diagnosis_date",
 ]
 
-_patients_view_logged = False
-
 @app.get("/stats")
 async def get_stats():
     """Fast lightweight stats from MongoDB aggregation."""
     try:
         stats = await db.get_patient_stats()
         trials = await db.get_trials_from_db()
+
+        _log_audit(
+            action="DASHBOARD_VIEWED",
+            details=f"Dashboard stats accessed ({stats.get('total_patients', 0)} patients, {len(trials)} trials)",
+            actor="System",
+            record_count=stats.get("total_patients", 0),
+        )
+
         return {
             "total_patients": stats.get("total_patients", 0),
             "total_trials": len(trials),
@@ -351,6 +430,39 @@ async def get_stats():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@app.get("/stats/hospitals")
+async def get_stats_hospitals():
+    """Return list of hospitals with basic info."""
+    try:
+        hospitals = await db.get_hospitals()
+        result = []
+        for h in hospitals:
+            patient_count = await db.count_patients()
+            result.append({
+                "name": h.get("hospital_name", h.get("username", "Unknown")),
+                "location": h.get("location", "India"),
+                "status": "Active",
+            })
+        return {"hospitals": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/stats/diseases")
+async def get_stats_diseases():
+    """Return disease breakdown with patient counts."""
+    try:
+        disease_counts = await db.get_disease_counts()
+        diseases = [
+            {"name": name, "count": count}
+            for name, count in sorted(disease_counts.items(), key=lambda x: x[1], reverse=True)
+        ]
+        return {"diseases": diseases, "total": sum(d["count"] for d in diseases)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/patients")
 async def get_patients(
     hospital: Optional[str] = None,
@@ -362,18 +474,16 @@ async def get_patients(
 ):
     """Paginated patients from MongoDB with server-side search & sort."""
     try:
-        # Log the patient view to audit trail (once per session)
-        global _patients_view_logged
-        if not _patients_view_logged and blockchain_logger and hasattr(blockchain_logger, 'log_event'):
+        # Log the patient view to audit trail (throttled — max once per 10s)
+        if _should_log_action("PATIENTS_VIEWED"):
             try:
                 total_count = await db.count_patients()
                 blockchain_logger.log_event(
                     action="PATIENTS_VIEWED",
-                    details=f"Patient data accessed ({total_count} total records in store)",
+                    details=f"Patient records accessed (page {page}, {total_count} total)",
                     actor=hospital or "System",
                     record_count=total_count,
                 )
-                _patients_view_logged = True
             except Exception:
                 pass
 
@@ -495,6 +605,14 @@ async def get_trials():
                 "sourceHospitalCount": 3,
             })
 
+        # Log trials view to blockchain audit trail (throttled)
+        _log_audit(
+            action="TRIALS_VIEWED",
+            details=f"Clinical trials accessed ({len(trials)} trials listed)",
+            actor="System",
+            record_count=len(trials),
+        )
+
         return {"trials": trials}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -532,8 +650,9 @@ async def get_eligible_patients_for_drug(
         eligible_count = len(eligible_ids)
         not_eligible_count = len(not_eligible_ids)
 
-        # Log eligibility check
-        if blockchain_logger and hasattr(blockchain_logger, 'log_event'):
+        # Log eligibility check (throttled per drug)
+        elig_action_key = f"ELIGIBILITY_SCREEN_{drug_name}"
+        if _should_log_action(elig_action_key):
             try:
                 blockchain_logger.log_event(
                     action="ELIGIBILITY_SCREEN",
@@ -753,17 +872,14 @@ async def predict_eligibility(patient: PatientData):
 
         eligible = 1 if score >= 60 else 0
 
-        if blockchain_logger and hasattr(blockchain_logger, 'log_event'):
-            try:
-                blockchain_logger.log_event(
-                    action="ELIGIBILITY_PREDICTION",
-                    details=f"Patient {patient.patient_id} scored {score}/100 — {'Eligible' if eligible else 'Not Eligible'} for {patient.disease}/{patient.drug}",
-                    actor="Prediction Engine",
-                    record_count=1,
-                    metadata={"patient_id": patient.patient_id, "score": score, "eligible": eligible},
-                )
-            except Exception:
-                pass
+        _log_audit(
+            action="ELIGIBILITY_PREDICTION",
+            details=f"Patient {patient.patient_id} scored {score}/100 — {'Eligible' if eligible else 'Not Eligible'} for {patient.disease}/{patient.drug}",
+            actor="Prediction Engine",
+            record_count=1,
+            metadata={"patient_id": patient.patient_id, "score": score, "eligible": eligible},
+            cooldown=2,  # predictions can be rapid
+        )
 
         return {
             "eligible": eligible,
@@ -796,16 +912,13 @@ async def start_training(request: Dict[str, Any] = None):
     is_training = True
     num_rounds = request.get("num_rounds", 10) if request else 10
 
-    if blockchain_logger and hasattr(blockchain_logger, 'log_event'):
-        try:
-            blockchain_logger.log_event(
-                action="TRAINING_STARTED",
-                details=f"Federated learning training started with {num_rounds} rounds",
-                actor="Training Controller",
-                record_count=num_rounds,
-            )
-        except Exception:
-            pass
+    _log_audit(
+        action="TRAINING_STARTED",
+        details=f"Federated learning training started with {num_rounds} rounds",
+        actor="Training Controller",
+        record_count=num_rounds,
+        cooldown=0,  # always log training start
+    )
 
     def run_training_simulation():
         global is_training, training_logs

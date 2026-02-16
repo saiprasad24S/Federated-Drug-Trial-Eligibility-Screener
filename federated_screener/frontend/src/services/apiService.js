@@ -28,6 +28,28 @@ export const apiService = {
     }
   },
 
+  // Get hospital details
+  getHospitalDetails: async () => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/stats/hospitals`);
+      return response.data;
+    } catch (error) {
+      console.error('Error getting hospital details:', error);
+      throw error;
+    }
+  },
+
+  // Get disease breakdown
+  getDiseaseBreakdown: async () => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/stats/diseases`);
+      return response.data;
+    } catch (error) {
+      console.error('Error getting disease breakdown:', error);
+      throw error;
+    }
+  },
+
   // Start federated training
   startTraining: async (config) => {
     try {
@@ -212,6 +234,11 @@ export const apiService = {
         return [];
       }
     }
+  },
+
+  // Log a frontend activity to the blockchain audit trail (fire-and-forget)
+  logActivity: (action, details = '', actor = 'System') => {
+    axios.post(`${API_BASE_URL}/log-activity`, { action, details, actor }).catch(() => {});
   },
 
   // Predict patient eligibility

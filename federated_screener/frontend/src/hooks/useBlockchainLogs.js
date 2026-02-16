@@ -2,16 +2,25 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { apiService } from '../services/apiService';
 import { blockchainService } from '../services/blockchainService';
 
-export function useBlockchainLogs(enabled = false, pollInterval = 2000) {
+export function useBlockchainLogs(enabled = false, pollInterval = 5000) {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const intervalRef = useRef(null);
+  const chainAttempted = useRef(false);
+  const lastHash = useRef('');  // dedup: skip re-render if data unchanged
 
   const fetchFromBackend = useCallback(async () => {
     try {
       const backendLogs = await apiService.getBlockchainLogs();
-      setLogs(Array.isArray(backendLogs) ? backendLogs : []);
+      const list = Array.isArray(backendLogs) ? backendLogs : [];
+      // Quick hash: compare count + newest txHash to avoid re-renders
+      const hash = `${list.length}_${list[0]?.txHash || ''}`;
+      if (hash !== lastHash.current) {
+        lastHash.current = hash;
+        setLogs(list);
+      }
+      setError(null);
       setLoading(false);
     } catch (err) {
       setError(err);
@@ -20,13 +29,13 @@ export function useBlockchainLogs(enabled = false, pollInterval = 2000) {
   }, []);
 
   const fetchFromChain = useCallback(async () => {
-    // In the new audit-log model the backend is the primary source.
-    // On-chain fetch is supplementary and only merges training rounds.
+    if (chainAttempted.current) return;
+    chainAttempted.current = true;
+
     try {
       const rounds = await blockchainService.getAllTrainingRounds();
       if (Array.isArray(rounds) && rounds.length > 0) {
         setLogs((prev) => {
-          // Merge on-chain training rounds into existing audit logs
           const existing = new Set((prev || []).filter(l => l.action === 'TRAINING_ROUND').map(l => l.metadata?.round || l.round));
           const newEntries = rounds
             .filter(r => !existing.has(r.round || r.round_number))
@@ -43,15 +52,13 @@ export function useBlockchainLogs(enabled = false, pollInterval = 2000) {
           return [...newEntries, ...prev];
         });
       }
-    } catch (err) {
-      console.warn('blockchain fetch failed, falling back to backend', err);
+    } catch {
+      // Blockchain node not available
     }
   }, []);
 
   const refresh = useCallback(async () => {
-    // Backend is the primary fast source — fetch it first and update immediately
     await fetchFromBackend();
-    // On-chain is supplementary, fetch in background (non-blocking)
     fetchFromChain().catch(() => {});
   }, [fetchFromBackend, fetchFromChain]);
 
@@ -68,10 +75,7 @@ export function useBlockchainLogs(enabled = false, pollInterval = 2000) {
         if (mounted) setLoading(false);
       }
     })();
-
-    return () => {
-      mounted = false;
-    };
+    return () => { mounted = false; };
   }, [refresh, enabled]);
 
   useEffect(() => {
@@ -83,30 +87,21 @@ export function useBlockchainLogs(enabled = false, pollInterval = 2000) {
       return;
     }
 
-    // Do an immediate fetch when tab becomes active
     refresh();
 
-    intervalRef.current = setInterval(() => {
-      refresh();
-    }, pollInterval);
+    intervalRef.current = setInterval(fetchFromBackend, pollInterval);
 
-    // subscribe to on-chain events if available
-    const handler = (entry) => setLogs((prev) => [entry, ...prev]);
     try {
+      const handler = (entry) => setLogs((prev) => [entry, ...prev]);
       blockchainService.onTrainingRoundLogged(handler);
-    } catch (e) {
+    } catch {
       // ignore
     }
 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
-      try {
-        // no-op for cleanup; ethers will handle listeners if needed
-      } catch (e) {
-        console.debug('error cleaning blockchain listeners', e);
-      }
     };
-  }, [enabled, pollInterval, refresh]);
+  }, [enabled, pollInterval, refresh, fetchFromBackend]);
 
   return { logs, loading, error, refresh };
 }
