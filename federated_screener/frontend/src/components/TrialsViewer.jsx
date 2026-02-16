@@ -238,10 +238,10 @@ export default function TrialsViewer({ user }) {
       ) : filtered.length === 0 ? (
         <Card><div className="text-center py-12" style={{ color: 'var(--text-tertiary)' }}>No trials found. Upload patient data first.</div></Card>
       ) : (
-        <motion.div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" variants={staggerContainer} initial="hidden" animate="visible">
+        <motion.div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 auto-rows-fr" variants={staggerContainer} initial="hidden" animate="visible">
           {filtered.map((trial) => (
-            <motion.div key={trial.id} variants={staggerItem}>
-              <Card hover onClick={() => handleSelectTrial(trial)} className="cursor-pointer">
+            <motion.div key={trial.id} variants={staggerItem} className="h-full">
+              <Card hover onClick={() => handleSelectTrial(trial)} className="cursor-pointer h-full flex flex-col">
                 <div className="flex justify-between items-start mb-2">
                   <h3 className="font-bold text-lg" style={{ color: 'var(--text-primary)' }}>{trial.drugName}</h3>
                   <StatusBadge status={trial.status} />
@@ -255,30 +255,32 @@ export default function TrialsViewer({ user }) {
                   </div>
                 )}
 
-                {trial.eligibilityParams && (
-                  <div className="space-y-1.5 mb-3">
-                    {trial.eligibilityParams.ageRange && (
-                      <div className="flex items-center gap-2 text-xs"><span className="w-20" style={{ color: 'var(--text-tertiary)' }}>Age:</span><span className="font-medium" style={{ color: 'var(--text-primary)' }}>{trial.eligibilityParams.ageRange[0]} – {trial.eligibilityParams.ageRange[1]} yrs</span></div>
-                    )}
-                    {trial.eligibilityParams.genders?.length > 0 && (
-                      <div className="flex items-center gap-2 text-xs"><span className="w-20" style={{ color: 'var(--text-tertiary)' }}>Gender:</span><span className="font-medium" style={{ color: 'var(--text-primary)' }}>{trial.eligibilityParams.genders.join(', ')}</span></div>
-                    )}
-                    {trial.eligibilityParams.bloodGroups?.length > 0 && (
-                      <div className="flex items-center gap-2 text-xs"><span className="w-20" style={{ color: 'var(--text-tertiary)' }}>Blood:</span><div className="flex gap-1 flex-wrap">{trial.eligibilityParams.bloodGroups.map(bg => <span key={bg} className="badge" style={{ background: 'var(--status-error-bg)', color: 'var(--status-error)' }}>{bg}</span>)}</div></div>
-                    )}
-                    {trial.eligibilityParams.bmiRange && (
-                      <div className="flex items-center gap-2 text-xs"><span className="w-20" style={{ color: 'var(--text-tertiary)' }}>BMI:</span><span className="font-medium" style={{ color: 'var(--text-primary)' }}>{trial.eligibilityParams.bmiRange[0]} – {trial.eligibilityParams.bmiRange[1]}</span></div>
-                    )}
-                    {trial.eligibilityParams.stages?.length > 0 && (
-                      <div className="flex items-center gap-2 text-xs"><span className="w-20" style={{ color: 'var(--text-tertiary)' }}>Stages:</span><span className="font-medium" style={{ color: 'var(--text-primary)' }}>{trial.eligibilityParams.stages.join(', ')}</span></div>
-                    )}
-                    {trial.eligibilityParams.commonComorbidities?.length > 0 && (
-                      <div className="flex items-center gap-2 text-xs"><span className="w-20" style={{ color: 'var(--text-tertiary)' }}>Comorbid.:</span><span className="font-medium" style={{ color: 'var(--text-primary)' }}>{trial.eligibilityParams.commonComorbidities.join(', ')}</span></div>
-                    )}
-                  </div>
-                )}
+                <div className="flex-1">
+                  {trial.eligibilityParams && (
+                    <div className="space-y-1.5 mb-3">
+                      {trial.eligibilityParams.ageRange && (
+                        <div className="flex items-center gap-2 text-xs"><span className="w-20 flex-shrink-0" style={{ color: 'var(--text-tertiary)' }}>Age:</span><span className="font-medium" style={{ color: 'var(--text-primary)' }}>{trial.eligibilityParams.ageRange[0]} – {trial.eligibilityParams.ageRange[1]} yrs</span></div>
+                      )}
+                      {trial.eligibilityParams.genders?.length > 0 && (
+                        <div className="flex items-center gap-2 text-xs"><span className="w-20 flex-shrink-0" style={{ color: 'var(--text-tertiary)' }}>Gender:</span><span className="font-medium" style={{ color: 'var(--text-primary)' }}>{trial.eligibilityParams.genders.join(', ')}</span></div>
+                      )}
+                      {trial.eligibilityParams.bloodGroups?.length > 0 && (
+                        <div className="flex items-center gap-2 text-xs"><span className="w-20 flex-shrink-0" style={{ color: 'var(--text-tertiary)' }}>Blood:</span><div className="flex gap-1 flex-wrap">{trial.eligibilityParams.bloodGroups.map(bg => <span key={bg} className="badge" style={{ background: 'var(--status-error-bg)', color: 'var(--status-error)' }}>{bg}</span>)}</div></div>
+                      )}
+                      {trial.eligibilityParams.bmiRange && (
+                        <div className="flex items-center gap-2 text-xs"><span className="w-20 flex-shrink-0" style={{ color: 'var(--text-tertiary)' }}>BMI:</span><span className="font-medium" style={{ color: 'var(--text-primary)' }}>{trial.eligibilityParams.bmiRange[0]} – {trial.eligibilityParams.bmiRange[1]}</span></div>
+                      )}
+                      {trial.eligibilityParams.stages?.length > 0 && (
+                        <div className="flex items-center gap-2 text-xs"><span className="w-20 flex-shrink-0" style={{ color: 'var(--text-tertiary)' }}>Stages:</span><span className="font-medium" style={{ color: 'var(--text-primary)' }}>{trial.eligibilityParams.stages.join(', ')}</span></div>
+                      )}
+                      {trial.eligibilityParams.commonComorbidities?.length > 0 && (
+                        <div className="flex items-center gap-2 text-xs"><span className="w-20 flex-shrink-0" style={{ color: 'var(--text-tertiary)' }}>Comorbid.:</span><span className="font-medium" style={{ color: 'var(--text-primary)' }}>{trial.eligibilityParams.commonComorbidities.join(', ')}</span></div>
+                      )}
+                    </div>
+                  )}
+                </div>
 
-                <div className="flex gap-3 text-xs pt-2" style={{ borderTop: '1px solid var(--border-primary)', color: 'var(--text-tertiary)' }}>
+                <div className="flex gap-3 text-xs pt-2 mt-auto" style={{ borderTop: '1px solid var(--border-primary)', color: 'var(--text-tertiary)' }}>
                   <span>Enrolled: <strong style={{ color: 'var(--text-primary)' }}>{trial.patientsEnrolled}</strong></span>
                   <span>Success: <strong style={{ color: 'var(--status-success)' }}>{trial.successRate}%</strong></span>
                 </div>

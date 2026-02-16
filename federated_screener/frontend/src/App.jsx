@@ -22,7 +22,9 @@ function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState(() => {
+    try { return localStorage.getItem('activeTab') || 'overview'; } catch { return 'overview'; }
+  });
   const [tabHistory, setTabHistory] = useState([]);
   const isDark = useThemeStore((s) => s.theme === 'dark');
 
@@ -30,6 +32,7 @@ function App() {
     if (tabId !== activeTab) {
       setTabHistory((prev) => [...prev, activeTab]);
       setActiveTab(tabId);
+      try { localStorage.setItem('activeTab', tabId); } catch { /* ignore */ }
       const tabLabel = TABS.find(t => t.id === tabId)?.label || tabId;
       apiService.logActivity('TAB_NAVIGATION', `Navigated to ${tabLabel}`, user?.username || 'System');
     }
@@ -41,6 +44,7 @@ function App() {
       const newHistory = [...prev];
       const prevTab = newHistory.pop();
       setActiveTab(prevTab);
+      try { localStorage.setItem('activeTab', prevTab); } catch { /* ignore */ }
       return newHistory;
     });
   };
@@ -57,6 +61,7 @@ function App() {
     apiService.logActivity('USER_LOGOUT', `User '${user?.username}' logged out`, user?.username || 'System');
     localStorage.removeItem('user');
     localStorage.removeItem('isAuthenticated');
+    localStorage.removeItem('activeTab');
     setUser(null);
     setIsAuthenticated(false);
     setActiveTab('overview');
