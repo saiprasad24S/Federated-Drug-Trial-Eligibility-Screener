@@ -10,3 +10,4 @@ eth-account
 PyPDF2
 motor
 pymongo[srv]
+python-multipart

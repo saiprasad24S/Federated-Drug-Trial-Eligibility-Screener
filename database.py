@@ -18,7 +18,7 @@ import json
 import logging
 from datetime import datetime
 from typing import List, Dict, Any, Optional
-
+import dotenv
 import certifi
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import MongoClient, ASCENDING, DESCENDING
@@ -27,11 +27,9 @@ from pymongo.errors import BulkWriteError
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-MONGO_URI = os.getenv(
-    "MONGO_URI",
-    "mongodb+srv://yb15313037_db_user:D09J5gpczE2QAAD8@cluster0.oxujjgd.mongodb.net/",
-)
-DB_NAME = os.getenv("MONGO_DB_NAME", "federated_screener")
+dotenv.load_dotenv()  # Load from .env if available
+MONGO_URI = os.getenv("MONGO_URI")
+DB_NAME = os.getenv("MONGO_DB_NAME")
 
 logger = logging.getLogger("database")
 if not logger.handlers:
