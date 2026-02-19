@@ -28,8 +28,8 @@ from pymongo.errors import BulkWriteError
 # Configuration
 # ---------------------------------------------------------------------------
 dotenv.load_dotenv()  # Load from .env if available
-MONGO_URI = os.getenv("MONGO_URI")
-DB_NAME = os.getenv("MONGO_DB_NAME")
+MONGO_URI = (os.getenv("MONGO_URI") or "").strip()
+DB_NAME = (os.getenv("MONGO_DB_NAME") or "").strip()
 
 logger = logging.getLogger("database")
 if not logger.handlers:
