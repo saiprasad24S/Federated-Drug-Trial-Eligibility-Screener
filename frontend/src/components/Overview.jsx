@@ -84,8 +84,8 @@ const WorkflowStep = memo(function WorkflowStep({ step, title, desc, icon, color
   );
 });
 
-export default function Overview({ onNavigate }) {
-  const [stats, setStats] = useState({ totalPatients: 0, totalTrials: 0, totalHospitals: 0, successRate: 0, uniqueDiseases: 0, drugTrials: 0 });
+export default function Overview({ onNavigate, user }) {
+  const [stats, setStats] = useState({ totalPatients: 0, globalTotalPatients: 0, totalTrials: 0, totalHospitals: 0, successRate: 0, uniqueDiseases: 0, drugTrials: 0 });
   const [loadingStats, setLoadingStats] = useState(true);
   const [trainingStatus, setTrainingStatus] = useState(null);
   const [activeDetail, setActiveDetail] = useState(null);
@@ -93,16 +93,18 @@ export default function Overview({ onNavigate }) {
   const [diseaseData, setDiseaseData] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const isDark = useThemeStore((s) => s.theme === 'dark');
+  const hospitalName = user?.hospital_name || '';
 
   useEffect(() => {
     let mounted = true;
     const loadOverviewData = async () => {
       try {
         setLoadingStats(true);
-        const data = await apiService.getStats();
+        const data = await apiService.getStats(hospitalName);
         if (!mounted) return;
         setStats({
           totalPatients: data.total_patients || 0,
+          globalTotalPatients: data.global_total_patients || data.total_patients || 0,
           totalTrials: data.total_trials || 0,
           totalHospitals: data.total_hospitals || 0,
           successRate: data.avg_success_rate || 0,
@@ -122,7 +124,7 @@ export default function Overview({ onNavigate }) {
     };
     loadOverviewData();
     return () => { mounted = false; };
-  }, []);
+  }, [hospitalName]);
 
   /* ── KPI Click Handlers ── */
   const handleKPIClick = useCallback(async (kpiKey) => {
@@ -192,9 +194,9 @@ export default function Overview({ onNavigate }) {
   }
 
   const kpis = [
-    { key: 'patients', icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>, iconBg: 'var(--kpi-blue-bg-solid)', iconColor: 'var(--kpi-blue-text)', label: 'Total Patients', value: stats.totalPatients.toLocaleString(), trend: 12, accentColor: 'var(--kpi-blue-accent)', actionLabel: 'View Patients' },
+    { key: 'patients', icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>, iconBg: 'var(--kpi-blue-bg-solid)', iconColor: 'var(--kpi-blue-text)', label: 'My Patients', value: stats.totalPatients.toLocaleString(), trend: 12, accentColor: 'var(--kpi-blue-accent)', actionLabel: 'View Patients' },
+    { key: 'globalPatients', icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>, iconBg: 'var(--kpi-teal-bg-solid)', iconColor: 'var(--kpi-teal-text)', label: 'Global Patients (Federated)', value: stats.globalTotalPatients.toLocaleString(), trend: null, accentColor: 'var(--kpi-teal-accent)', actionLabel: 'Federated Pool' },
     { key: 'trials', icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>, iconBg: 'var(--kpi-green-bg-solid)', iconColor: 'var(--kpi-green-text)', label: 'Active Trials', value: stats.totalTrials, trend: 8, accentColor: 'var(--kpi-green-accent)', actionLabel: 'View Trials' },
-    { key: 'successRate', icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>, iconBg: 'var(--kpi-teal-bg-solid)', iconColor: 'var(--kpi-teal-text)', label: 'Avg Success Rate', value: `${stats.successRate}%`, trend: 5, accentColor: 'var(--kpi-teal-accent)', actionLabel: 'View Details' },
     { key: 'hospitals', icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>, iconBg: 'var(--kpi-purple-bg-solid)', iconColor: 'var(--kpi-purple-text)', label: 'Hospitals', value: stats.totalHospitals, trend: null, accentColor: 'var(--kpi-purple-accent)', actionLabel: 'View Hospitals' },
     { key: 'diseases', icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>, iconBg: 'var(--kpi-orange-bg-solid)', iconColor: 'var(--kpi-orange-text)', label: 'Unique Diseases', value: stats.uniqueDiseases, trend: 3, accentColor: 'var(--kpi-orange-accent)', actionLabel: 'View Diseases' },
     { key: 'drugTrials', icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" /></svg>, iconBg: 'var(--kpi-rose-bg-solid)', iconColor: 'var(--kpi-rose-text)', label: 'Drug Trials', value: stats.drugTrials, trend: -2, accentColor: 'var(--kpi-rose-accent)', actionLabel: 'View Drug Trials' },
@@ -259,13 +261,16 @@ export default function Overview({ onNavigate }) {
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                       {hospitalData.map((h, idx) => (
                         <motion.div key={h.name} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.1 }}
-                          className="rounded-2xl p-5 text-center" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)' }}>
+                          className="rounded-2xl p-5 text-center" style={{ background: 'var(--bg-secondary)', border: `1.5px solid ${h.name === hospitalName ? 'var(--brand-accent)' : 'var(--border-primary)'}` }}>
                           <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3"
                             style={{ background: CHART_COLORS[idx % CHART_COLORS.length] + '18', color: CHART_COLORS[idx % CHART_COLORS.length], border: `1.5px solid ${CHART_COLORS[idx % CHART_COLORS.length]}25` }}>
                             <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
                           </div>
                           <p className="font-bold text-sm" style={{ color: 'var(--text-primary)' }}>{h.name}</p>
+                          {h.name === hospitalName && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: 'var(--brand-accent)', color: '#fff' }}>YOU</span>}
                           <p className="text-xs mt-1" style={{ color: 'var(--text-tertiary)' }}>{h.location}</p>
+                          <p className="text-lg font-black mt-2 tabular-nums" style={{ color: CHART_COLORS[idx % CHART_COLORS.length] }}>{(h.patient_count || 0).toLocaleString()}</p>
+                          <p className="text-[10px] font-medium" style={{ color: 'var(--text-tertiary)' }}>patients</p>
                           <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold"
                             style={{ background: 'var(--kpi-green-bg-solid)', color: 'var(--kpi-green-text)', border: '1px solid var(--status-success-border)' }}>
                             <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--kpi-green-text)' }} />

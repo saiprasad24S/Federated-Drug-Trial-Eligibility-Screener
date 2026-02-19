@@ -2,7 +2,6 @@ from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-import subprocess
 import threading
 import time
 from typing import List, Dict, Any, Optional
@@ -10,13 +9,6 @@ import sys
 import os
 import json
 from datetime import datetime
-
-try:
-    import PyPDF2
-    PYPDF2_AVAILABLE = True
-except ImportError:
-    PYPDF2_AVAILABLE = False
-    print("Warning: PyPDF2 not available. PDF upload will have limited functionality.")
 
 # Add parent directory to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -35,16 +27,7 @@ except Exception as e:
     import traceback
     traceback.print_exc()
 
-# ---------------------------------------------------------------------------
-# FL Components (optional)
-# ---------------------------------------------------------------------------
-try:
-    from fl_server.server import FederatedServer
-    FL_SERVER_AVAILABLE = True
-except Exception as e:
-    print(f"Warning: Federated Learning Server not available: {e}")
-    FL_SERVER_AVAILABLE = False
-    FederatedServer = None
+
 
 # ---------------------------------------------------------------------------
 # Blockchain logger
@@ -80,6 +63,14 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 training_logs: list = []
 is_training: bool = False
+
+# ---------------------------------------------------------------------------
+# Server-side result caches (avoids reloading all patients on every request)
+# ---------------------------------------------------------------------------
+_trials_cache: Dict[str, Any] = {"data": None, "ts": 0}
+_TRIALS_CACHE_TTL = 15  # seconds
+_eligibility_cache: Dict[str, Any] = {}  # key = drug_name -> {data, ts}
+_ELIGIBILITY_CACHE_TTL = 10  # seconds
 
 # ---------------------------------------------------------------------------
 # Blockchain audit-log throttle  (prevents spamming on repeated page views)
@@ -145,27 +136,6 @@ async def log_startup_event():
 class TrainingRequest(BaseModel):
     num_rounds: int = 10
 
-class LogEntry(BaseModel):
-    round: int
-    accuracy: float
-    loss: float
-    timestamp: str
-    model_hash: str
-
-class PatientData(BaseModel):
-    patient_id: str
-    age: int
-    gender: Optional[str] = None
-    blood_group: Optional[str] = None
-    disease: str
-    stage: Optional[str] = None
-    comorbidities: List[str] = []
-    bmi: Optional[float] = None
-    diagnosis_date: Optional[str] = None
-    drug: str
-    eligible: int = 0
-    drug_worked: int = 0
-
 class LoginRequest(BaseModel):
     username: str
     password: str
@@ -203,47 +173,8 @@ async def login(request: LoginRequest):
     }
 
 # ---------------------------------------------------------------------------
-# FL Training endpoints
+# Training endpoints
 # ---------------------------------------------------------------------------
-@app.post("/start-fl")
-async def start_federated_learning(request: TrainingRequest):
-    global is_training
-    if is_training:
-        raise HTTPException(status_code=400, detail="Training already in progress")
-
-    is_training = True
-
-    def run_training():
-        global is_training, training_logs
-        try:
-            server = FederatedServer(num_rounds=request.num_rounds)
-            client_threads = []
-            for i in range(3):
-                thread = threading.Thread(target=start_client, args=(i,))
-                thread.daemon = True
-                client_threads.append(thread)
-                thread.start()
-            time.sleep(2)
-            server.start_server()
-            training_logs = server.training_logs
-        except Exception as e:
-            print(f"Training failed: {e}")
-        finally:
-            is_training = False
-
-    training_thread = threading.Thread(target=run_training)
-    training_thread.daemon = True
-    training_thread.start()
-    return {"message": f"Federated learning started with {request.num_rounds} rounds"}
-
-def start_client(client_id: int):
-    try:
-        subprocess.run([
-            "python", "clients/client.py", str(client_id)
-        ], cwd=os.path.dirname(os.path.dirname(__file__)))
-    except Exception as e:
-        print(f"Client {client_id} failed: {e}")
-
 @app.get("/training-logs")
 async def get_training_logs_endpoint():
     """Get training logs from MongoDB (falls back to in-memory)."""
@@ -265,32 +196,6 @@ async def get_training_logs_endpoint():
         print(f"[TRAINING] Error getting logs from MongoDB: {e}")
     return training_logs
 
-@app.get("/model-metrics")
-async def get_model_metrics():
-    if not training_logs:
-        return {"message": "No training data available"}
-
-    latest_log = training_logs[-1] if training_logs else None
-    blockchain_logs_list = blockchain_logger.get_logs() if blockchain_logger else []
-
-    formatted_logs = []
-    for log in blockchain_logs_list:
-        formatted_logs.append({
-            "round": log.get("round_number", 0),
-            "accuracy": log.get("accuracy", 0),
-            "loss": log.get("loss", 0),
-            "timestamp": log.get("timestamp", 0),
-            "txHash": log.get("metadata_hash", "0x0000000000000000")
-        })
-
-    return {
-        "latest_metrics": latest_log,
-        "blockchain_logs": formatted_logs,
-        "blockchain_logs_count": len(formatted_logs),
-        "total_rounds": len(training_logs),
-        "is_training": is_training
-    }
-
 # ---------------------------------------------------------------------------
 # Frontend activity logging — lightweight endpoint for UI-driven events
 # ---------------------------------------------------------------------------
@@ -298,6 +203,7 @@ class ActivityLog(BaseModel):
     action: str
     details: str = ""
     actor: str = "System"
+    record_count: int = 0
 
 @app.post("/log-activity")
 async def log_activity(entry: ActivityLog):
@@ -306,6 +212,7 @@ async def log_activity(entry: ActivityLog):
         action=entry.action,
         details=entry.details,
         actor=entry.actor,
+        record_count=entry.record_count,
         cooldown=5,  # 5s throttle for frontend events
     )
     return {"ok": True}
@@ -314,15 +221,14 @@ async def log_activity(entry: ActivityLog):
 async def health_check():
     mongo_connected = False
     try:
-        client = db.get_sync_client()
-        client.admin.command("ping")
+        await db.get_async_db().command("ping")
         mongo_connected = True
     except Exception:
         pass
 
     return {
         "status": "healthy",
-        "blockchain_connected": blockchain_logger.w3.is_connected() if blockchain_logger else False,
+        "blockchain_connected": False,
         "mongodb_connected": mongo_connected,
         "training_active": is_training
     }
@@ -380,7 +286,7 @@ async def get_blockchain_logs():
 # Patient endpoints — powered by MongoDB
 # ---------------------------------------------------------------------------
 # Internal/ML fields hidden from ALL views
-_INTERNAL_COLUMNS = {"eligible", "drug_worked", "drug"}
+_INTERNAL_COLUMNS = {"eligible", "drug_worked", "drug", "hospital_name"}
 
 # Personal / identifying fields — shown only in the Patients tab (own hospital)
 _PERSONAL_COLUMNS = [
@@ -393,7 +299,6 @@ _PATIENT_VIEW_COLUMNS = [
     "patient_id", "patient_name", "age", "gender", "phone", "email",
     "address", "blood_group", "disease", "stage", "comorbidities",
     "bmi", "diagnosis_date", "admission_date", "emergency_contact",
-    "hospital",
 ]
 
 # Columns for federated / trials view — privacy-preserving (NO personal info)
@@ -403,29 +308,36 @@ _FEDERATED_COLUMNS = [
 ]
 
 @app.get("/stats")
-async def get_stats():
-    """Fast lightweight stats from MongoDB aggregation."""
+async def get_stats(hospital: Optional[str] = None):
+    """Fast lightweight stats from MongoDB aggregation.
+
+    If *hospital* is provided, patient counts are scoped to that hospital.
+    Global (federated) totals are always included for context.
+    """
     try:
-        stats = await db.get_patient_stats()
+        stats = await db.get_patient_stats(hospital_name=hospital)
         trials = await db.get_trials_from_db()
+        hospital_counts = await db.get_hospital_patient_counts()
 
         _log_audit(
             action="DASHBOARD_VIEWED",
-            details=f"Dashboard stats accessed ({stats.get('total_patients', 0)} patients, {len(trials)} trials)",
-            actor="System",
+            details=f"Dashboard stats accessed by {hospital or 'System'} ({stats.get('total_patients', 0)} own patients, {stats.get('global_total_patients', 0)} global)",
+            actor=hospital or "System",
             record_count=stats.get("total_patients", 0),
         )
 
         return {
             "total_patients": stats.get("total_patients", 0),
+            "global_total_patients": stats.get("global_total_patients", 0),
             "total_trials": len(trials),
-            "total_hospitals": 3,
+            "total_hospitals": len(hospital_counts) or 3,
             "unique_diseases": stats.get("unique_diseases", 0),
             "drug_trials": len(trials),
             "avg_success_rate": 65.7,
             "is_training": is_training,
             "rounds_completed": len(training_logs),
             "latest_accuracy": round(training_logs[-1]["accuracy"] * 100, 1) if training_logs else None,
+            "hospital_patient_counts": hospital_counts,
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -433,16 +345,18 @@ async def get_stats():
 
 @app.get("/stats/hospitals")
 async def get_stats_hospitals():
-    """Return list of hospitals with basic info."""
+    """Return list of hospitals with patient counts."""
     try:
         hospitals = await db.get_hospitals()
+        hospital_counts = await db.get_hospital_patient_counts()
         result = []
         for h in hospitals:
-            patient_count = await db.count_patients()
+            hname = h.get("hospital_name", h.get("username", "Unknown"))
             result.append({
-                "name": h.get("hospital_name", h.get("username", "Unknown")),
+                "name": hname,
                 "location": h.get("location", "India"),
                 "status": "Active",
+                "patient_count": hospital_counts.get(hname, 0),
             })
         return {"hospitals": result}
     except Exception as e:
@@ -472,17 +386,24 @@ async def get_patients(
     sort_by: Optional[str] = None,
     sort_dir: Optional[str] = "asc",
 ):
-    """Paginated patients from MongoDB with server-side search & sort."""
+    """Paginated patients from MongoDB — scoped to the requesting hospital.
+
+    Only patients whose *hospital_name* matches the supplied *hospital*
+    parameter are returned, ensuring each hospital sees only its own data.
+    """
     try:
         # Log the patient view to audit trail (throttled — max once per 10s)
         if _should_log_action("PATIENTS_VIEWED"):
             try:
-                total_count = await db.count_patients()
+                if hospital:
+                    hosp_count = await db.count_patients_for_hospital(hospital)
+                else:
+                    hosp_count = await db.count_patients()
                 blockchain_logger.log_event(
                     action="PATIENTS_VIEWED",
-                    details=f"Patient records accessed (page {page}, {total_count} total)",
+                    details=f"Patient records accessed by {hospital or 'System'} — {hosp_count} hospital records (page {page})",
                     actor=hospital or "System",
-                    record_count=total_count,
+                    record_count=hosp_count,
                 )
             except Exception:
                 pass
@@ -493,6 +414,7 @@ async def get_patients(
             search=search,
             sort_by=sort_by,
             sort_dir=sort_dir,
+            hospital_name=hospital,   # <-- scope to this hospital
         )
         return result
     except Exception as e:
@@ -563,21 +485,31 @@ def _build_trial_params_for_disease(all_patients, disease):
     }
 
 # ---------------------------------------------------------------------------
+def _invalidate_trials_cache():
+    """Call after data changes (upload) to force re-computation."""
+    _trials_cache["data"] = None
+    _trials_cache["ts"] = 0
+    _eligibility_cache.clear()
+
 # Trials endpoints — definitions from MongoDB
 # ---------------------------------------------------------------------------
 @app.get("/trials")
 async def get_trials():
-    """Return drug trials from MongoDB with eligibility estimates."""
+    """Return drug trials from MongoDB with eligibility estimates (cached)."""
     import random as _rand
-    try:
-        all_p = await db.get_all_patients_list()
-        total_patients = len(all_p)
 
+    now = time.time()
+    if _trials_cache["data"] and (now - _trials_cache["ts"]) < _TRIALS_CACHE_TTL:
+        return _trials_cache["data"]
+
+    try:
+        total_patients = await db.count_patients()
         disease_counts = await db.get_disease_counts()
         trial_defs = await db.get_trials_from_db()
 
+        # Use a small sample for estimated eligibility (avoids loading ALL patients)
         SAMPLE_SIZE = 2000
-        sample = _rand.sample(all_p, min(SAMPLE_SIZE, total_patients)) if total_patients > SAMPLE_SIZE else all_p
+        sample = await db.get_patient_sample(SAMPLE_SIZE)
         sample_len = len(sample)
 
         trials = []
@@ -585,7 +517,7 @@ async def get_trials():
             disease = tdef["indication"]
             enrolled = disease_counts.get(disease, 0)
 
-            elig_params = _build_trial_params_for_disease(all_p, disease)
+            elig_params = _build_trial_params_for_disease(sample, disease)
 
             sample_eligible = sum(1 for p in sample if _compute_eligibility(p, elig_params))
             estimated_eligible = round(sample_eligible * total_patients / sample_len) if sample_len > 0 else 0
@@ -613,7 +545,10 @@ async def get_trials():
             record_count=len(trials),
         )
 
-        return {"trials": trials}
+        result = {"trials": trials}
+        _trials_cache["data"] = result
+        _trials_cache["ts"] = now
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -631,7 +566,8 @@ async def get_eligible_patients_for_drug(
         page_size = min(max(page_size, 10), 200)
         page = max(page, 1)
 
-        all_p = await db.get_all_patients_list()
+        # Only fetch the fields needed for eligibility computation
+        all_p = await db.get_all_patients_for_eligibility()
 
         # Build trial disease map from DB
         trial_defs = await db.get_trials_from_db()
@@ -641,11 +577,23 @@ async def get_eligible_patients_for_drug(
 
         eligible_ids = []
         not_eligible_ids = []
+        # Also track hospital-specific eligibility
+        hospital_eligible_count = 0
+        hospital_not_eligible_count = 0
+        hospital_total = 0
         for i, patient in enumerate(all_p):
-            if _compute_eligibility(patient, trial_params):
+            is_elig = _compute_eligibility(patient, trial_params)
+            if is_elig:
                 eligible_ids.append(i)
             else:
                 not_eligible_ids.append(i)
+            # Count hospital-specific numbers
+            if hospital and patient.get("hospital_name") == hospital:
+                hospital_total += 1
+                if is_elig:
+                    hospital_eligible_count += 1
+                else:
+                    hospital_not_eligible_count += 1
 
         eligible_count = len(eligible_ids)
         not_eligible_count = len(not_eligible_ids)
@@ -654,12 +602,15 @@ async def get_eligible_patients_for_drug(
         elig_action_key = f"ELIGIBILITY_SCREEN_{drug_name}"
         if _should_log_action(elig_action_key):
             try:
+                hosp_detail = f" | {hospital}: {hospital_eligible_count} eligible out of {hospital_total}" if hospital else ""
                 blockchain_logger.log_event(
                     action="ELIGIBILITY_SCREEN",
-                    details=f"{drug_name}: {eligible_count} eligible, {not_eligible_count} not eligible out of {len(all_p)} patients",
+                    details=f"{drug_name}: {eligible_count} eligible, {not_eligible_count} not eligible out of {len(all_p)} patients (federated){hosp_detail}",
                     actor=hospital or "System",
                     record_count=eligible_count + not_eligible_count,
-                    metadata={"drug": drug_name, "eligible": eligible_count, "not_eligible": not_eligible_count},
+                    metadata={"drug": drug_name, "eligible": eligible_count, "not_eligible": not_eligible_count,
+                              "hospital_eligible": hospital_eligible_count, "hospital_not_eligible": hospital_not_eligible_count,
+                              "hospital_total": hospital_total},
                 )
             except Exception:
                 pass
@@ -695,6 +646,9 @@ async def get_eligible_patients_for_drug(
             "columns": cols,
             "eligible_count": eligible_count,
             "not_eligible_count": not_eligible_count,
+            "hospital_eligible_count": hospital_eligible_count,
+            "hospital_not_eligible_count": hospital_not_eligible_count,
+            "hospital_total": hospital_total,
             "page": page,
             "page_size": page_size,
             "total_pages": total_pages,
@@ -762,7 +716,10 @@ async def upload_file(file: UploadFile = File(...), hospital: Optional[str] = No
                 p.pop("drug_worked", None)
                 new_patients_list.append(p)
 
-        inserted_count = await db.insert_patients(new_patients_list)
+        inserted_count = await db.insert_patients(new_patients_list, hospital_name=default_hospital)
+
+        # Invalidate server-side caches so new data is reflected
+        _invalidate_trials_cache()
 
         # Regenerate federated training CSV
         _upload_progress[upload_id] = {"percent": 80, "stage": "Generating training CSV..."}
@@ -818,77 +775,6 @@ async def upload_file(file: UploadFile = File(...), hospital: Optional[str] = No
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
-
-@app.post("/upload-json")
-async def upload_json(file: UploadFile = File(...), hospital: Optional[str] = None):
-    return await upload_file(file, hospital)
-
-@app.post("/upload-pdf")
-async def upload_pdf(file: UploadFile = File(...), hospital: Optional[str] = None):
-    return await upload_file(file, hospital)
-
-@app.post("/upload-csv")
-async def upload_csv(file: UploadFile = File(...), hospital: Optional[str] = None):
-    return await upload_file(file, hospital)
-
-# ---------------------------------------------------------------------------
-# Predict endpoint
-# ---------------------------------------------------------------------------
-@app.post("/predict")
-async def predict_eligibility(patient: PatientData):
-    try:
-        score = 0
-        reasons = []
-
-        if 18 <= patient.age <= 65:
-            score += 30
-            reasons.append("Age within optimal range")
-        elif patient.age > 65:
-            score += 15
-            reasons.append("Age above 65, reduced eligibility")
-        else:
-            reasons.append("Age below 18, ineligible")
-
-        if patient.bmi and 18.5 <= patient.bmi <= 30:
-            score += 25
-            reasons.append("BMI within healthy range")
-        elif patient.bmi:
-            score += 10
-            reasons.append("BMI outside healthy range")
-
-        if patient.stage in ["I", "II"]:
-            score += 25
-            reasons.append("Early stage disease, good for trial")
-        elif patient.stage == "III":
-            score += 15
-            reasons.append("Advanced stage disease")
-
-        if len(patient.comorbidities) <= 1:
-            score += 20
-            reasons.append("Few comorbidities")
-        else:
-            score += 5
-            reasons.append("Multiple comorbidities present")
-
-        eligible = 1 if score >= 60 else 0
-
-        _log_audit(
-            action="ELIGIBILITY_PREDICTION",
-            details=f"Patient {patient.patient_id} scored {score}/100 — {'Eligible' if eligible else 'Not Eligible'} for {patient.disease}/{patient.drug}",
-            actor="Prediction Engine",
-            record_count=1,
-            metadata={"patient_id": patient.patient_id, "score": score, "eligible": eligible},
-            cooldown=2,  # predictions can be rapid
-        )
-
-        return {
-            "eligible": eligible,
-            "score": score,
-            "reasons": reasons,
-            "recommendation": "Eligible for trial" if eligible else "Not eligible for trial"
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 # ---------------------------------------------------------------------------
 # Training Management

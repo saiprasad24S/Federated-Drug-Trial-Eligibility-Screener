@@ -74,6 +74,9 @@ export default function TrialsViewer({ user }) {
     const patients = eligData?.patients || [];
     const eligibleCount = eligData?.eligible_count ?? 0;
     const notEligibleCount = eligData?.not_eligible_count ?? 0;
+    const hospitalEligible = eligData?.hospital_eligible_count ?? 0;
+    const hospitalNotEligible = eligData?.hospital_not_eligible_count ?? 0;
+    const hospitalTotal = eligData?.hospital_total ?? 0;
     const totalPages = eligData?.total_pages ?? 1;
     const currentPage = eligData?.page ?? 1;
 
@@ -95,7 +98,7 @@ export default function TrialsViewer({ user }) {
               <div className="w-1.5 h-6 rounded-full" style={{ background: 'var(--brand-primary)' }} />
               <h2 className="text-xl font-bold" style={{ color: 'var(--text-primary)' }}>{selectedTrial.drugName}</h2>
             </div>
-            <p className="text-xs mt-1.5 ml-3.5" style={{ color: 'var(--text-tertiary)' }}>Eligibility check across all current patients</p>
+            <p className="text-xs mt-1.5 ml-3.5" style={{ color: 'var(--text-tertiary)' }}>Eligibility check across all federated hospitals — your hospital's results highlighted below</p>
           </div>
 
           {/* Privacy banner */}
@@ -119,17 +122,49 @@ export default function TrialsViewer({ user }) {
             ))}
           </div>
 
-          {/* Summary counts */}
-          <div className="grid grid-cols-2 gap-3 mb-4">
-            <div className="rounded-xl p-4 text-center" style={{ background: 'var(--status-success-bg)', border: '1px solid var(--status-success-border)' }}>
-              <p className="text-3xl font-extrabold tabular-nums" style={{ color: 'var(--status-success)' }}>{eligibleCount.toLocaleString()}</p>
-              <p className="text-[11px] font-semibold uppercase tracking-wider mt-1" style={{ color: 'var(--status-success)' }}>Eligible Patients</p>
+          {/* Summary counts — Hospital-specific + Global */}
+          {hospitalTotal > 0 && (
+            <>
+              <div className="mb-2">
+                <p className="text-xs font-bold uppercase tracking-wider mb-2 ml-1" style={{ color: 'var(--brand-primary)' }}>Your Hospital ({hospitalName}) — {hospitalTotal.toLocaleString()} patients</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-xl p-4 text-center" style={{ background: 'var(--status-success-bg)', border: '2px solid var(--status-success)' }}>
+                    <p className="text-3xl font-extrabold tabular-nums" style={{ color: 'var(--status-success)' }}>{hospitalEligible.toLocaleString()}</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider mt-1" style={{ color: 'var(--status-success)' }}>Eligible from Your Hospital</p>
+                  </div>
+                  <div className="rounded-xl p-4 text-center" style={{ background: 'var(--status-error-bg)', border: '2px solid var(--status-error)' }}>
+                    <p className="text-3xl font-extrabold tabular-nums" style={{ color: 'var(--status-error)' }}>{hospitalNotEligible.toLocaleString()}</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider mt-1" style={{ color: 'var(--status-error)' }}>Not Eligible from Your Hospital</p>
+                  </div>
+                </div>
+              </div>
+              <div className="mb-4">
+                <p className="text-xs font-bold uppercase tracking-wider mb-2 ml-1" style={{ color: 'var(--text-tertiary)' }}>Global Federated Pool — {(eligibleCount + notEligibleCount).toLocaleString()} patients across all hospitals</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-xl p-3 text-center" style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--status-success-border)' }}>
+                    <p className="text-xl font-bold tabular-nums" style={{ color: 'var(--status-success)' }}>{eligibleCount.toLocaleString()}</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider mt-1" style={{ color: 'var(--text-tertiary)' }}>Eligible (All Hospitals)</p>
+                  </div>
+                  <div className="rounded-xl p-3 text-center" style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--status-error-border)' }}>
+                    <p className="text-xl font-bold tabular-nums" style={{ color: 'var(--status-error)' }}>{notEligibleCount.toLocaleString()}</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider mt-1" style={{ color: 'var(--text-tertiary)' }}>Not Eligible (All Hospitals)</p>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+          {hospitalTotal === 0 && (
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <div className="rounded-xl p-4 text-center" style={{ background: 'var(--status-success-bg)', border: '1px solid var(--status-success-border)' }}>
+                <p className="text-3xl font-extrabold tabular-nums" style={{ color: 'var(--status-success)' }}>{eligibleCount.toLocaleString()}</p>
+                <p className="text-[11px] font-semibold uppercase tracking-wider mt-1" style={{ color: 'var(--status-success)' }}>Eligible Patients</p>
+              </div>
+              <div className="rounded-xl p-4 text-center" style={{ background: 'var(--status-error-bg)', border: '1px solid var(--status-error-border)' }}>
+                <p className="text-3xl font-extrabold tabular-nums" style={{ color: 'var(--status-error)' }}>{notEligibleCount.toLocaleString()}</p>
+                <p className="text-[11px] font-semibold uppercase tracking-wider mt-1" style={{ color: 'var(--status-error)' }}>Not Eligible</p>
+              </div>
             </div>
-            <div className="rounded-xl p-4 text-center" style={{ background: 'var(--status-error-bg)', border: '1px solid var(--status-error-border)' }}>
-              <p className="text-3xl font-extrabold tabular-nums" style={{ color: 'var(--status-error)' }}>{notEligibleCount.toLocaleString()}</p>
-              <p className="text-[11px] font-semibold uppercase tracking-wider mt-1" style={{ color: 'var(--status-error)' }}>Not Eligible</p>
-            </div>
-          </div>
+          )}
 
           {/* Tab buttons */}
           <div className="flex gap-2 mb-4">

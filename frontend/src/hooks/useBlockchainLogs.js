@@ -1,13 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { apiService } from '../services/apiService';
-import { blockchainService } from '../services/blockchainService';
 
-export function useBlockchainLogs(enabled = false, pollInterval = 5000) {
+export function useBlockchainLogs(enabled = false, pollInterval = 12000) {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const intervalRef = useRef(null);
-  const chainAttempted = useRef(false);
   const lastHash = useRef('');  // dedup: skip re-render if data unchanged
 
   const fetchFromBackend = useCallback(async () => {
@@ -28,39 +26,9 @@ export function useBlockchainLogs(enabled = false, pollInterval = 5000) {
     }
   }, []);
 
-  const fetchFromChain = useCallback(async () => {
-    if (chainAttempted.current) return;
-    chainAttempted.current = true;
-
-    try {
-      const rounds = await blockchainService.getAllTrainingRounds();
-      if (Array.isArray(rounds) && rounds.length > 0) {
-        setLogs((prev) => {
-          const existing = new Set((prev || []).filter(l => l.action === 'TRAINING_ROUND').map(l => l.metadata?.round || l.round));
-          const newEntries = rounds
-            .filter(r => !existing.has(r.round || r.round_number))
-            .map(r => ({
-              action: 'TRAINING_ROUND',
-              details: `Round ${r.round || r.round_number} (on-chain)`,
-              actor: 'Blockchain',
-              record_count: 1,
-              timestamp: r.timestamp,
-              txHash: r.txHash || r.metadata_hash || '',
-              metadata: r,
-            }));
-          if (newEntries.length === 0) return prev;
-          return [...newEntries, ...prev];
-        });
-      }
-    } catch {
-      // Blockchain node not available
-    }
-  }, []);
-
   const refresh = useCallback(async () => {
     await fetchFromBackend();
-    fetchFromChain().catch(() => {});
-  }, [fetchFromBackend, fetchFromChain]);
+  }, [fetchFromBackend]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -88,15 +56,7 @@ export function useBlockchainLogs(enabled = false, pollInterval = 5000) {
     }
 
     refresh();
-
     intervalRef.current = setInterval(fetchFromBackend, pollInterval);
-
-    try {
-      const handler = (entry) => setLogs((prev) => [entry, ...prev]);
-      blockchainService.onTrainingRoundLogged(handler);
-    } catch {
-      // ignore
-    }
 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);

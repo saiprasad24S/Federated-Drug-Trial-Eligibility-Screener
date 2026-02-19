@@ -178,7 +178,7 @@ function App() {
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 page-content">
           <AnimatePresence mode="wait">
             <motion.div key={activeTab} {...pageTransition}>
-              {activeTab === 'overview' && <Overview onNavigate={navigateTab} />}
+              {activeTab === 'overview' && <Overview onNavigate={navigateTab} user={user} />}
               {activeTab === 'patients' && <PatientsManager user={user} />}
               {activeTab === 'trials' && <TrialsViewer user={user} />}
               {activeTab === 'blockchain' && <BlockchainTable blockchainData={blockchainLogs} loading={bcLoading} />}

@@ -72,7 +72,7 @@ export default function PatientsManager({ user }) {
       setTotalPatients(response.total ?? 0);
       setTotalPages(response.total_pages ?? 1);
       if (response.columns?.length) setColumns(response.columns);
-      else if (response.patients?.length) setColumns(Object.keys(response.patients[0]).filter(k => !['hospital','eligible','drug_worked'].includes(k)));
+      else if (response.patients?.length) setColumns(Object.keys(response.patients[0]).filter(k => !['hospital','hospital_name','eligible','drug_worked'].includes(k)));
     } catch (error) { console.error('Error loading patients:', error); }
     finally { setLoading(false); }
   };

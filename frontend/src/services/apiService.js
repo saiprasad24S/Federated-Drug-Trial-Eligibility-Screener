@@ -18,9 +18,10 @@ export const apiService = {
   },
 
   // Get fast overview stats (no heavy data transfer)
-  getStats: async () => {
+  getStats: async (hospital) => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/stats`);
+      const params = hospital ? `?hospital=${encodeURIComponent(hospital)}` : '';
+      const response = await axios.get(`${API_BASE_URL}/stats${params}`);
       return response.data;
     } catch (error) {
       console.error('Error getting stats:', error);
@@ -237,8 +238,8 @@ export const apiService = {
   },
 
   // Log a frontend activity to the blockchain audit trail (fire-and-forget)
-  logActivity: (action, details = '', actor = 'System') => {
-    axios.post(`${API_BASE_URL}/log-activity`, { action, details, actor }).catch(() => {});
+  logActivity: (action, details = '', actor = 'System', recordCount = 0) => {
+    axios.post(`${API_BASE_URL}/log-activity`, { action, details, actor, record_count: recordCount }).catch(() => {});
   },
 
   // Predict patient eligibility

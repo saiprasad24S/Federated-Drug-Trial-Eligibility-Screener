@@ -78,6 +78,12 @@ def ensure_indexes():
         db.patients.create_index([("disease", ASCENDING)])
         db.patients.create_index([("age", ASCENDING)])
         db.patients.create_index([("gender", ASCENDING)])
+        db.patients.create_index([("hospital_name", ASCENDING)])
+        # Compound index for hospital-scoped queries (most common access pattern)
+        db.patients.create_index(
+            [("hospital_name", ASCENDING), ("patient_id", ASCENDING)],
+            name="hospital_patient_lookup",
+        )
         db.patients.create_index([
             ("patient_id", ASCENDING),
             ("patient_name", ASCENDING),
@@ -302,21 +308,36 @@ async def count_patients(filter_query: dict = None) -> int:
     return await db.patients.count_documents(filter_query or {})
 
 
+async def count_patients_for_hospital(hospital_name: str) -> int:
+    """Count patients belonging to a specific hospital."""
+    db = get_async_db()
+    return await db.patients.count_documents({"hospital_name": hospital_name})
+
+
 async def get_patients_paginated(
     page: int = 1,
     page_size: int = 50,
     search: str = None,
     sort_by: str = None,
     sort_dir: str = "asc",
+    hospital_name: str = None,
 ) -> Dict[str, Any]:
-    """Return paginated patients with server-side search & sort."""
+    """Return paginated patients with server-side search & sort.
+
+    If *hospital_name* is provided, only patients belonging to that hospital
+    are returned.  This ensures each hospital sees only its own records.
+    """
     db = get_async_db()
 
     query = {}
+    # Scope to a specific hospital when provided
+    if hospital_name:
+        query["hospital_name"] = hospital_name
+
     if search:
         # Text search across key fields
         regex = {"$regex": search, "$options": "i"}
-        query["$or"] = [
+        search_clause = [
             {"patient_id": regex},
             {"patient_name": regex},
             {"disease": regex},
@@ -327,6 +348,11 @@ async def get_patients_paginated(
             {"email": regex},
             {"address": regex},
         ]
+        if hospital_name:
+            # Combine hospital filter with text search
+            query = {"$and": [{"hospital_name": hospital_name}, {"$or": search_clause}]}
+        else:
+            query["$or"] = search_clause
 
     total = await db.patients.count_documents(query)
 
@@ -351,13 +377,13 @@ async def get_patients_paginated(
 
     # Detect columns from first batch — enforce preferred order
     columns = []
-    hidden = {"eligible", "drug_worked", "drug"}
+    hidden = {"eligible", "drug_worked", "drug", "hospital_name"}
     # Preferred column order: personal details first, then medical
     PREFERRED_ORDER = [
         "patient_id", "patient_name", "age", "gender", "phone", "email",
         "address", "blood_group", "disease", "stage", "comorbidities",
         "bmi", "diagnosis_date", "admission_date", "emergency_contact",
-        "hospital",
+        "hospital_name",
     ]
     if patients:
         all_keys = set()
@@ -388,6 +414,42 @@ async def get_all_patients_list() -> List[dict]:
     return await cursor.to_list(length=None)
 
 
+# Projection that only fetches fields needed for eligibility checks
+_ELIGIBILITY_PROJECTION = {
+    "_id": 0, "patient_id": 1, "age": 1, "gender": 1, "blood_group": 1,
+    "disease": 1, "stage": 1, "comorbidities": 1, "bmi": 1,
+    "diagnosis_date": 1, "hospital_name": 1,
+}
+
+
+async def get_all_patients_for_eligibility() -> List[dict]:
+    """Return ALL patients with only the fields needed for eligibility.
+
+    This is much faster than get_all_patients_list() because personal
+    fields (name, phone, email, address, etc.) are excluded via projection.
+    """
+    db = get_async_db()
+    cursor = db.patients.find({}, _ELIGIBILITY_PROJECTION)
+    return await cursor.to_list(length=None)
+
+
+async def get_patient_sample(size: int = 2000) -> List[dict]:
+    """Return a random sample of patients for estimation.
+
+    Uses MongoDB $sample aggregation stage for efficient random sampling.
+    """
+    db = get_async_db()
+    total = await db.patients.count_documents({})
+    if total <= size:
+        cursor = db.patients.find({}, _ELIGIBILITY_PROJECTION)
+        return await cursor.to_list(length=None)
+    pipeline = [
+        {"$sample": {"size": size}},
+        {"$project": _ELIGIBILITY_PROJECTION},
+    ]
+    return [doc async for doc in db.patients.aggregate(pipeline)]
+
+
 async def get_disease_counts() -> Dict[str, int]:
     """Aggregate patient counts by disease."""
     db = get_async_db()
@@ -408,32 +470,56 @@ async def get_patients_for_disease(disease: str) -> List[dict]:
     return await cursor.to_list(length=None)
 
 
-async def insert_patients(patients: List[dict]) -> int:
-    """Insert new patient records. Returns count inserted."""
+async def insert_patients(patients: List[dict], hospital_name: str = None) -> int:
+    """Insert new patient records. If *hospital_name* is given, each record is
+    tagged with that hospital so it can be scoped to the uploading account."""
     if not patients:
         return 0
     db = get_async_db()
     for p in patients:
         p.pop("_id", None)
+        if hospital_name:
+            p["hospital_name"] = hospital_name
     result = await db.patients.insert_many(patients, ordered=False)
     return len(result.inserted_ids)
 
 
-async def get_patient_stats() -> Dict[str, Any]:
-    """Get fast aggregate stats."""
+async def get_patient_stats(hospital_name: str = None) -> Dict[str, Any]:
+    """Get fast aggregate stats, optionally scoped to a hospital."""
     db = get_async_db()
-    total = await db.patients.count_documents({})
-    pipeline = [
+    match_stage = {"hospital_name": hospital_name} if hospital_name else {}
+    total = await db.patients.count_documents(match_stage)
+    pipeline = []
+    if match_stage:
+        pipeline.append({"$match": match_stage})
+    pipeline += [
         {"$group": {"_id": "$disease"}},
         {"$count": "unique_diseases"},
     ]
     disease_count = 0
     async for doc in db.patients.aggregate(pipeline):
         disease_count = doc.get("unique_diseases", 0)
+
+    # Also return global total for federated context
+    global_total = await db.patients.count_documents({})
     return {
         "total_patients": total,
         "unique_diseases": disease_count,
+        "global_total_patients": global_total,
     }
+
+
+async def get_hospital_patient_counts() -> Dict[str, int]:
+    """Return {hospital_name: patient_count} for all hospitals."""
+    db = get_async_db()
+    pipeline = [
+        {"$group": {"_id": "$hospital_name", "count": {"$sum": 1}}},
+    ]
+    result = {}
+    async for doc in db.patients.aggregate(pipeline):
+        if doc["_id"]:
+            result[doc["_id"]] = doc["count"]
+    return result
 
 
 # ---------------------------------------------------------------------------
