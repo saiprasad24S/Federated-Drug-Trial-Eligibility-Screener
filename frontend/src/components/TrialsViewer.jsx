@@ -32,6 +32,7 @@ export default function TrialsViewer({ user }) {
   const [eligPage, setEligPage] = useState(1);
 
   const [searchTerm, setSearchTerm] = useState('');
+  const [showBreakdown, setShowBreakdown] = useState(null); // 'eligible' | 'not_eligible' | null
   const hospitalName = user?.hospital_name || '';
   const isDark = useThemeStore((s) => s.theme === 'dark');
 
@@ -49,7 +50,7 @@ export default function TrialsViewer({ user }) {
     finally { setEligLoading(false); }
   };
 
-  const handleSelectTrial = (trial) => { setSelectedTrial(trial); setEligData(null); setActiveTab('eligible'); setEligPage(1); loadEligibility(trial.drugName, 'eligible', 1); };
+  const handleSelectTrial = (trial) => { setSelectedTrial(trial); setEligData(null); setActiveTab('eligible'); setEligPage(1); setShowBreakdown(null); loadEligibility(trial.drugName, 'eligible', 1); };
   useEffect(() => { if (selectedTrial) loadEligibility(selectedTrial.drugName, activeTab, eligPage); }, [activeTab, eligPage]);
   const handleTabChange = (tab) => { setActiveTab(tab); setEligPage(1); };
 
@@ -77,6 +78,7 @@ export default function TrialsViewer({ user }) {
     const hospitalEligible = eligData?.hospital_eligible_count ?? 0;
     const hospitalNotEligible = eligData?.hospital_not_eligible_count ?? 0;
     const hospitalTotal = eligData?.hospital_total ?? 0;
+    const hospitalBreakdown = eligData?.hospital_breakdown ?? {};
     const totalPages = eligData?.total_pages ?? 1;
     const currentPage = eligData?.page ?? 1;
 
@@ -141,28 +143,70 @@ export default function TrialsViewer({ user }) {
               <div className="mb-4">
                 <p className="text-xs font-bold uppercase tracking-wider mb-2 ml-1" style={{ color: 'var(--text-tertiary)' }}>Global Federated Pool — {(eligibleCount + notEligibleCount).toLocaleString()} patients across all hospitals</p>
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-xl p-3 text-center" style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--status-success-border)' }}>
+                  <button onClick={() => setShowBreakdown(showBreakdown === 'eligible' ? null : 'eligible')} className="rounded-xl p-3 text-center cursor-pointer transition-all duration-200 hover:scale-[1.02]" style={{ background: showBreakdown === 'eligible' ? 'var(--status-success-bg)' : 'var(--bg-tertiary)', border: `2px solid ${showBreakdown === 'eligible' ? 'var(--status-success)' : 'var(--status-success-border)'}` }}>
                     <p className="text-xl font-bold tabular-nums" style={{ color: 'var(--status-success)' }}>{eligibleCount.toLocaleString()}</p>
                     <p className="text-[10px] font-semibold uppercase tracking-wider mt-1" style={{ color: 'var(--text-tertiary)' }}>Eligible (All Hospitals)</p>
-                  </div>
-                  <div className="rounded-xl p-3 text-center" style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--status-error-border)' }}>
+                  </button>
+                  <button onClick={() => setShowBreakdown(showBreakdown === 'not_eligible' ? null : 'not_eligible')} className="rounded-xl p-3 text-center cursor-pointer transition-all duration-200 hover:scale-[1.02]" style={{ background: showBreakdown === 'not_eligible' ? 'var(--status-error-bg)' : 'var(--bg-tertiary)', border: `2px solid ${showBreakdown === 'not_eligible' ? 'var(--status-error)' : 'var(--status-error-border)'}` }}>
                     <p className="text-xl font-bold tabular-nums" style={{ color: 'var(--status-error)' }}>{notEligibleCount.toLocaleString()}</p>
                     <p className="text-[10px] font-semibold uppercase tracking-wider mt-1" style={{ color: 'var(--text-tertiary)' }}>Not Eligible (All Hospitals)</p>
-                  </div>
+                  </button>
                 </div>
+                {showBreakdown && (
+                  <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mt-3 rounded-xl overflow-hidden" style={{ border: `1px solid ${showBreakdown === 'eligible' ? 'var(--status-success-border)' : 'var(--status-error-border)'}` }}>
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr style={{ background: showBreakdown === 'eligible' ? 'var(--status-success-bg)' : 'var(--status-error-bg)' }}>
+                          <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: showBreakdown === 'eligible' ? 'var(--status-success)' : 'var(--status-error)' }}>Hospital</th>
+                          <th className="px-4 py-2.5 text-right text-xs font-semibold uppercase tracking-wider" style={{ color: showBreakdown === 'eligible' ? 'var(--status-success)' : 'var(--status-error)' }}>{showBreakdown === 'eligible' ? 'Eligible' : 'Not Eligible'} Patients</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {Object.entries(hospitalBreakdown).filter(([, c]) => (showBreakdown === 'eligible' ? c.eligible > 0 : c.not_eligible > 0)).sort((a, b) => (showBreakdown === 'eligible' ? b[1].eligible - a[1].eligible : b[1].not_eligible - a[1].not_eligible)).map(([hName, counts]) => (
+                          <tr key={hName} style={{ borderTop: '1px solid var(--border-primary)' }}>
+                            <td className="px-4 py-2.5 font-medium" style={{ color: 'var(--text-primary)' }}>{hName}</td>
+                            <td className="px-4 py-2.5 text-right font-bold tabular-nums" style={{ color: showBreakdown === 'eligible' ? 'var(--status-success)' : 'var(--status-error)' }}>{showBreakdown === 'eligible' ? counts.eligible.toLocaleString() : counts.not_eligible.toLocaleString()}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </motion.div>
+                )}
               </div>
             </>
           )}
           {hospitalTotal === 0 && (
-            <div className="grid grid-cols-2 gap-3 mb-4">
-              <div className="rounded-xl p-4 text-center" style={{ background: 'var(--status-success-bg)', border: '1px solid var(--status-success-border)' }}>
-                <p className="text-3xl font-extrabold tabular-nums" style={{ color: 'var(--status-success)' }}>{eligibleCount.toLocaleString()}</p>
-                <p className="text-[11px] font-semibold uppercase tracking-wider mt-1" style={{ color: 'var(--status-success)' }}>Eligible Patients</p>
+            <div className="mb-4">
+              <div className="grid grid-cols-2 gap-3">
+                <button onClick={() => setShowBreakdown(showBreakdown === 'eligible' ? null : 'eligible')} className="rounded-xl p-4 text-center cursor-pointer transition-all duration-200 hover:scale-[1.02]" style={{ background: showBreakdown === 'eligible' ? 'var(--status-success-bg)' : 'var(--status-success-bg)', border: `2px solid ${showBreakdown === 'eligible' ? 'var(--status-success)' : 'var(--status-success-border)'}` }}>
+                  <p className="text-3xl font-extrabold tabular-nums" style={{ color: 'var(--status-success)' }}>{eligibleCount.toLocaleString()}</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-wider mt-1" style={{ color: 'var(--status-success)' }}>Eligible Patients</p>
+                </button>
+                <button onClick={() => setShowBreakdown(showBreakdown === 'not_eligible' ? null : 'not_eligible')} className="rounded-xl p-4 text-center cursor-pointer transition-all duration-200 hover:scale-[1.02]" style={{ background: showBreakdown === 'not_eligible' ? 'var(--status-error-bg)' : 'var(--status-error-bg)', border: `2px solid ${showBreakdown === 'not_eligible' ? 'var(--status-error)' : 'var(--status-error-border)'}` }}>
+                  <p className="text-3xl font-extrabold tabular-nums" style={{ color: 'var(--status-error)' }}>{notEligibleCount.toLocaleString()}</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-wider mt-1" style={{ color: 'var(--status-error)' }}>Not Eligible</p>
+                </button>
               </div>
-              <div className="rounded-xl p-4 text-center" style={{ background: 'var(--status-error-bg)', border: '1px solid var(--status-error-border)' }}>
-                <p className="text-3xl font-extrabold tabular-nums" style={{ color: 'var(--status-error)' }}>{notEligibleCount.toLocaleString()}</p>
-                <p className="text-[11px] font-semibold uppercase tracking-wider mt-1" style={{ color: 'var(--status-error)' }}>Not Eligible</p>
-              </div>
+              {showBreakdown && (
+                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mt-3 rounded-xl overflow-hidden" style={{ border: `1px solid ${showBreakdown === 'eligible' ? 'var(--status-success-border)' : 'var(--status-error-border)'}` }}>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr style={{ background: showBreakdown === 'eligible' ? 'var(--status-success-bg)' : 'var(--status-error-bg)' }}>
+                        <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: showBreakdown === 'eligible' ? 'var(--status-success)' : 'var(--status-error)' }}>Hospital</th>
+                        <th className="px-4 py-2.5 text-right text-xs font-semibold uppercase tracking-wider" style={{ color: showBreakdown === 'eligible' ? 'var(--status-success)' : 'var(--status-error)' }}>{showBreakdown === 'eligible' ? 'Eligible' : 'Not Eligible'} Patients</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Object.entries(hospitalBreakdown).filter(([, c]) => (showBreakdown === 'eligible' ? c.eligible > 0 : c.not_eligible > 0)).sort((a, b) => (showBreakdown === 'eligible' ? b[1].eligible - a[1].eligible : b[1].not_eligible - a[1].not_eligible)).map(([hName, counts]) => (
+                        <tr key={hName} style={{ borderTop: '1px solid var(--border-primary)' }}>
+                          <td className="px-4 py-2.5 font-medium" style={{ color: 'var(--text-primary)' }}>{hName}</td>
+                          <td className="px-4 py-2.5 text-right font-bold tabular-nums" style={{ color: showBreakdown === 'eligible' ? 'var(--status-success)' : 'var(--status-error)' }}>{showBreakdown === 'eligible' ? counts.eligible.toLocaleString() : counts.not_eligible.toLocaleString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </motion.div>
+              )}
             </div>
           )}
 

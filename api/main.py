@@ -601,6 +601,8 @@ async def get_eligible_patients_for_drug(
         hospital_eligible_count = 0
         hospital_not_eligible_count = 0
         hospital_total = 0
+        # Track per-hospital breakdown
+        hospital_breakdown = {}
         for i, patient in enumerate(all_p):
             is_elig = _compute_eligibility(patient, trial_params)
             if is_elig:
@@ -614,6 +616,15 @@ async def get_eligible_patients_for_drug(
                     hospital_eligible_count += 1
                 else:
                     hospital_not_eligible_count += 1
+            # Per-hospital breakdown
+            h_name = patient.get("hospital_name", "Unknown")
+            if h_name not in hospital_breakdown:
+                hospital_breakdown[h_name] = {"eligible": 0, "not_eligible": 0, "total": 0}
+            hospital_breakdown[h_name]["total"] += 1
+            if is_elig:
+                hospital_breakdown[h_name]["eligible"] += 1
+            else:
+                hospital_breakdown[h_name]["not_eligible"] += 1
 
         eligible_count = len(eligible_ids)
         not_eligible_count = len(not_eligible_ids)
@@ -669,6 +680,7 @@ async def get_eligible_patients_for_drug(
             "hospital_eligible_count": hospital_eligible_count,
             "hospital_not_eligible_count": hospital_not_eligible_count,
             "hospital_total": hospital_total,
+            "hospital_breakdown": hospital_breakdown,
             "page": page,
             "page_size": page_size,
             "total_pages": total_pages,

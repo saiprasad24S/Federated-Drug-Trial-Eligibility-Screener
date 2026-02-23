@@ -106,7 +106,6 @@ const BlockchainTable = memo(function BlockchainTable({ blockchainData = [], loa
                       <th className="px-3 py-2.5">Action</th>
                       <th className="px-3 py-2.5">Details</th>
                       <th className="px-3 py-2.5">Actor</th>
-                      <th className="px-3 py-2.5 text-right">Records</th>
                       <th className="px-3 py-2.5">Timestamp</th>
                       <th className="px-3 py-2.5">Tx Hash</th>
                     </tr>
@@ -133,7 +132,6 @@ const BlockchainTable = memo(function BlockchainTable({ blockchainData = [], loa
                           </td>
                           <td className="px-3 py-3 align-top text-sm max-w-xs truncate" style={{ color: 'var(--text-primary)' }} title={entry.details}>{entry.details || '-'}</td>
                           <td className="px-3 py-3 align-top text-sm" style={{ color: 'var(--text-secondary)' }}>{entry.actor || '-'}</td>
-                          <td className="px-3 py-3 align-top text-sm text-right font-medium" style={{ color: 'var(--text-primary)' }}>{entry.record_count != null ? entry.record_count.toLocaleString() : '-'}</td>
                           <td className="px-3 py-3 align-top text-sm whitespace-nowrap" style={{ color: 'var(--text-tertiary)' }}>{formatTimestamp(entry.timestamp)}</td>
                           <td className="px-3 py-3 align-top text-xs font-mono" style={{ color: 'var(--text-tertiary)' }}>
                             {entry.txHash ? (
