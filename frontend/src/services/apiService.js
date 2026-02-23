@@ -124,6 +124,18 @@ export const apiService = {
     }
   },
 
+  // Create a new trial
+  createTrial: async (trialData, hospital) => {
+    try {
+      const params = hospital ? `?hospital=${encodeURIComponent(hospital)}` : '';
+      const response = await axios.post(`${API_BASE_URL}/trials${params}`, trialData);
+      return response.data;
+    } catch (error) {
+      console.error('Error creating trial:', error);
+      throw error;
+    }
+  },
+
   // Get eligible patients for a specific drug (paginated)
   getEligibleForDrug: async (drugName, hospital, { page = 1, pageSize = 50, tab = 'eligible' } = {}) => {
     try {

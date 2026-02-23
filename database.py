@@ -621,3 +621,18 @@ async def get_trials_from_db() -> List[dict]:
     db = get_async_db()
     cursor = db.trials.find({}, {"_id": 0})
     return await cursor.to_list(length=None)
+
+
+async def create_trial(trial: dict) -> dict:
+    """Insert a new trial definition into MongoDB.
+
+    Returns the inserted trial (without _id).
+    Raises ValueError if drugName already exists.
+    """
+    db = get_async_db()
+    existing = await db.trials.find_one({"drugName": trial["drugName"]})
+    if existing:
+        raise ValueError(f"Trial with drug name '{trial['drugName']}' already exists")
+    await db.trials.insert_one(trial)
+    trial.pop("_id", None)
+    return trial

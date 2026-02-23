@@ -573,6 +573,37 @@ async def get_trials(hospital: Optional[str] = None):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class CreateTrialRequest(BaseModel):
+    drugName: str
+    indication: str
+    phase: str = "Phase III"
+    status: str = "Active"
+    successRate: float = 0.0
+
+@app.post("/trials")
+async def create_trial(req: CreateTrialRequest, hospital: Optional[str] = None):
+    """Create a new drug trial and persist to MongoDB."""
+    try:
+        trial_data = req.dict()
+        result = await db.create_trial(trial_data)
+
+        # Invalidate trials cache so the new trial appears immediately
+        _invalidate_trials_cache()
+
+        _log_audit(
+            action="TRIAL_CREATED",
+            details=f"New trial '{req.drugName}' for {req.indication} ({req.phase}) created",
+            actor=hospital or "Unknown Hospital",
+            cooldown=0,
+        )
+
+        return {"message": f"Trial '{req.drugName}' created successfully", "trial": result}
+    except ValueError as ve:
+        raise HTTPException(status_code=409, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/trials/{drug_name}/eligible")
 async def get_eligible_patients_for_drug(
     drug_name: str,

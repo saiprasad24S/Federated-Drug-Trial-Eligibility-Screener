@@ -33,6 +33,10 @@ export default function TrialsViewer({ user }) {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [showBreakdown, setShowBreakdown] = useState(null); // 'eligible' | 'not_eligible' | null
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newTrial, setNewTrial] = useState({ drugName: '', indication: '', phase: 'Phase III', status: 'Active', successRate: '' });
+  const [createError, setCreateError] = useState('');
+  const [creating, setCreating] = useState(false);
   const hospitalName = user?.hospital_name || '';
   const isDark = useThemeStore((s) => s.theme === 'dark');
 
@@ -60,6 +64,34 @@ export default function TrialsViewer({ user }) {
   });
 
   const handleBack = () => { setSelectedTrial(null); setEligData(null); };
+
+  const handleCreateTrial = async (e) => {
+    e.preventDefault();
+    setCreateError('');
+    if (!newTrial.drugName.trim() || !newTrial.indication.trim()) {
+      setCreateError('Drug name and indication are required');
+      return;
+    }
+    try {
+      setCreating(true);
+      const payload = {
+        drugName: newTrial.drugName.trim(),
+        indication: newTrial.indication.trim(),
+        phase: newTrial.phase,
+        status: newTrial.status,
+        successRate: parseFloat(newTrial.successRate) || 0,
+      };
+      await apiService.createTrial(payload, hospitalName);
+      setShowCreateModal(false);
+      setNewTrial({ drugName: '', indication: '', phase: 'Phase III', status: 'Active', successRate: '' });
+      await loadTrials();
+    } catch (error) {
+      const msg = error?.response?.data?.detail || error.message || 'Failed to create trial';
+      setCreateError(msg);
+    } finally {
+      setCreating(false);
+    }
+  };
 
   const pageNumbers = useMemo(() => {
     if (!eligData) return [];
@@ -297,7 +329,15 @@ export default function TrialsViewer({ user }) {
             </div>
             <p className="text-xs ml-3.5" style={{ color: 'var(--text-tertiary)' }}>Click a trial to see how many current patients are eligible</p>
           </div>
-          <Button variant="primary" onClick={loadTrials}>Refresh</Button>
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={loadTrials}>Refresh</Button>
+            <Button variant="primary" onClick={() => { setShowCreateModal(true); setCreateError(''); }}>
+              <span className="flex items-center gap-1.5">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                Create New Trial
+              </span>
+            </Button>
+          </div>
         </div>
 
         <div className="p-3 rounded-lg text-sm flex items-start gap-2" style={{ background: 'var(--status-info-bg)', border: '1px solid var(--status-info-border)', color: 'var(--status-info)' }}>
@@ -368,6 +408,80 @@ export default function TrialsViewer({ user }) {
           ))}
         </motion.div>
       )}
+
+      {/* Create Trial Modal */}
+      <AnimatePresence>
+        {showCreateModal && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}
+            onClick={() => setShowCreateModal(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="w-full max-w-md rounded-2xl shadow-2xl p-6"
+              style={{ background: 'var(--bg-card)', border: '1px solid var(--border-primary)' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-5">
+                <div className="flex items-center gap-2">
+                  <div className="w-1.5 h-6 rounded-full" style={{ background: 'var(--brand-primary)' }} />
+                  <h3 className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>Create New Trial</h3>
+                </div>
+                <button onClick={() => setShowCreateModal(false)} className="w-8 h-8 rounded-lg flex items-center justify-center transition" style={{ color: 'var(--text-tertiary)', background: 'var(--bg-tertiary)' }}>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+
+              <form onSubmit={handleCreateTrial} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>Drug Name *</label>
+                  <input type="text" required value={newTrial.drugName} onChange={(e) => setNewTrial(p => ({ ...p, drugName: e.target.value }))} placeholder="e.g. Cardiozen-X" className="input w-full" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>Indication (Disease) *</label>
+                  <input type="text" required value={newTrial.indication} onChange={(e) => setNewTrial(p => ({ ...p, indication: e.target.value }))} placeholder="e.g. Heart Disease" className="input w-full" />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>Phase</label>
+                    <select value={newTrial.phase} onChange={(e) => setNewTrial(p => ({ ...p, phase: e.target.value }))} className="input w-full" style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-md)', padding: '0.5rem 0.75rem' }}>
+                      <option value="Phase I">Phase I</option>
+                      <option value="Phase II">Phase II</option>
+                      <option value="Phase III">Phase III</option>
+                      <option value="Phase IV">Phase IV</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>Status</label>
+                    <select value={newTrial.status} onChange={(e) => setNewTrial(p => ({ ...p, status: e.target.value }))} className="input w-full" style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-md)', padding: '0.5rem 0.75rem' }}>
+                      <option value="Active">Active</option>
+                      <option value="Completed">Completed</option>
+                      <option value="Suspended">Suspended</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>Success Rate (%)</label>
+                  <input type="number" min="0" max="100" step="0.1" value={newTrial.successRate} onChange={(e) => setNewTrial(p => ({ ...p, successRate: e.target.value }))} placeholder="e.g. 65.0" className="input w-full" />
+                </div>
+
+                {createError && (
+                  <div className="p-2.5 rounded-lg text-sm" style={{ background: 'var(--status-error-bg)', color: 'var(--status-error)', border: '1px solid var(--status-error-border)' }}>{createError}</div>
+                )}
+
+                <div className="flex gap-3 pt-2">
+                  <Button type="button" variant="secondary" onClick={() => setShowCreateModal(false)} className="flex-1">Cancel</Button>
+                  <Button type="submit" variant="primary" disabled={creating} className="flex-1">
+                    {creating ? 'Creating...' : 'Create & Publish'}
+                  </Button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
