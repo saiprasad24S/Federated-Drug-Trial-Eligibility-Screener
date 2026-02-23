@@ -19,12 +19,12 @@ nosetests.xml
 coverage.xml
 *.cover
 .hypothesis/
+*.egg-info/
 
 # Node
 node_modules/
 npm-debug.log
 yarn-error.log
-dist/
 .next/
 
 # IDE
@@ -40,21 +40,23 @@ dist/
 .env.local
 .env.*.local
 
-# Misc
+# Logs
 *.log
-.cache/
 
 # OS
 Thumbs.db
 
-# Large data files (too big for GitHub)
+# Large data files
 medical_data.json
 mimic_adapted.csv
+
+# Uploads
 uploads/
-csv_archive/
-*.csv
+
+# Build outputs
+frontend/dist/
+frontend/.vite/
+
+# Temp files
 PROJECT_STRUCTURE_AND_CODE.txt
 temp_patch.txt
-
-# Vite cache
-.vite/

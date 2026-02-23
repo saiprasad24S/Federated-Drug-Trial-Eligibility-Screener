@@ -113,9 +113,10 @@ export const apiService = {
   },
 
   // Get all trials (drug names + anonymized eligibility parameters)
-  getTrials: async () => {
+  getTrials: async (hospital) => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/trials`);
+      const params = hospital ? `?hospital=${encodeURIComponent(hospital)}` : '';
+      const response = await axios.get(`${API_BASE_URL}/trials${params}`);
       return response.data;
     } catch (error) {
       console.error('Error getting trials:', error);
@@ -238,7 +239,7 @@ export const apiService = {
   },
 
   // Log a frontend activity to the blockchain audit trail (fire-and-forget)
-  logActivity: (action, details = '', actor = 'System', recordCount = 0) => {
+  logActivity: (action, details = '', actor = 'Unknown Hospital', recordCount = 0) => {
     axios.post(`${API_BASE_URL}/log-activity`, { action, details, actor, record_count: recordCount }).catch(() => {});
   },
 

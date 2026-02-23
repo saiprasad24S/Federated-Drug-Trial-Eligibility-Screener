@@ -134,10 +134,11 @@ export default function LoginPage({ onLogin }) {
   };
 
   const demoUsers = [
-    { user: 'SaiPrasad24S', pass: '2724', label: 'Admin', icon: '👑' },
-    { user: 'apollo', pass: 'apollo@123', label: 'Apollo', icon: '🏥' },
-    { user: 'fortis', pass: 'fortis@123', label: 'Fortis', icon: '🏥' },
-    { user: 'max', pass: 'max@123', label: 'Max', icon: '🏥' },
+    { user: 'SaiPrasad24S', pass: '2724', label: 'Sai Prasad', icon: '🏥' },
+    { user: 'Apollo', pass: 'apollo9', label: 'Apollo', icon: '🏥' },
+    { user: 'KIMS', pass: 'kims8', label: 'KIMS', icon: '🏥' },
+    { user: 'Medicover', pass: 'medicover5', label: 'Medicover', icon: '🏥' },
+    { user: 'Citizens', pass: 'citizens4', label: 'Citizens', icon: '🏥' },
   ];
 
   return (

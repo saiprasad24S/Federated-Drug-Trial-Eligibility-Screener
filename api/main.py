@@ -59,6 +59,19 @@ app.add_middleware(
 )
 
 # ---------------------------------------------------------------------------
+# Root endpoint
+# ---------------------------------------------------------------------------
+@app.get("/")
+async def root():
+    """Root endpoint — basic API info."""
+    return {
+        "name": "Federated Drug Trial Eligibility Screener API",
+        "version": "1.0.0",
+        "docs": "/docs",
+        "health": "/health",
+    }
+
+# ---------------------------------------------------------------------------
 # Global in-memory state (training only — ephemeral)
 # ---------------------------------------------------------------------------
 training_logs: list = []
@@ -87,7 +100,7 @@ def _should_log_action(action: str, cooldown: float = _AUDIT_COOLDOWN) -> bool:
         return True
     return False
 
-def _log_audit(action: str, details: str = "", actor: str = "System",
+def _log_audit(action: str, details: str = "", actor: str = "Unknown Hospital",
                record_count: int = 0, metadata: dict = None,
                cooldown: float = _AUDIT_COOLDOWN) -> None:
     """Convenience: throttle + fire-and-forget blockchain audit log."""
@@ -118,7 +131,7 @@ async def log_startup_event():
     _log_audit(
         action="SYSTEM_STARTUP",
         details=f"FDTES API server started with {patients_count} patients loaded",
-        actor="System",
+        actor="Server",
         record_count=patients_count,
         cooldown=0,  # always log startup
     )
@@ -159,7 +172,7 @@ async def login(request: LoginRequest):
     _log_audit(
         action="USER_LOGIN",
         details=f"User '{hospital['username']}' logged in from {hospital['hospital_name']}",
-        actor=hospital["username"],
+        actor=hospital["hospital_name"],
         cooldown=0,  # always log logins
     )
 
@@ -202,7 +215,7 @@ async def get_training_logs_endpoint():
 class ActivityLog(BaseModel):
     action: str
     details: str = ""
-    actor: str = "System"
+    actor: str = "Unknown Hospital"
     record_count: int = 0
 
 @app.post("/log-activity")
@@ -226,9 +239,16 @@ async def health_check():
     except Exception:
         pass
 
+    blockchain_connected = False
+    try:
+        if blockchain_logger and hasattr(blockchain_logger, 'w3') and blockchain_logger.w3:
+            blockchain_connected = blockchain_logger.w3.is_connected()
+    except Exception:
+        pass
+
     return {
         "status": "healthy",
-        "blockchain_connected": False,
+        "blockchain_connected": blockchain_connected,
         "mongodb_connected": mongo_connected,
         "training_active": is_training
     }
@@ -321,8 +341,8 @@ async def get_stats(hospital: Optional[str] = None):
 
         _log_audit(
             action="DASHBOARD_VIEWED",
-            details=f"Dashboard stats accessed by {hospital or 'System'} ({stats.get('total_patients', 0)} own patients, {stats.get('global_total_patients', 0)} global)",
-            actor=hospital or "System",
+            details=f"Dashboard stats accessed by {hospital or 'Unknown Hospital'} ({stats.get('total_patients', 0)} own patients, {stats.get('global_total_patients', 0)} global)",
+            actor=hospital or "Unknown Hospital",
             record_count=stats.get("total_patients", 0),
         )
 
@@ -401,8 +421,8 @@ async def get_patients(
                     hosp_count = await db.count_patients()
                 blockchain_logger.log_event(
                     action="PATIENTS_VIEWED",
-                    details=f"Patient records accessed by {hospital or 'System'} — {hosp_count} hospital records (page {page})",
-                    actor=hospital or "System",
+                    details=f"Patient records accessed by {hospital or 'Unknown Hospital'} — {hosp_count} hospital records (page {page})",
+                    actor=hospital or "Unknown Hospital",
                     record_count=hosp_count,
                 )
             except Exception:
@@ -494,7 +514,7 @@ def _invalidate_trials_cache():
 # Trials endpoints — definitions from MongoDB
 # ---------------------------------------------------------------------------
 @app.get("/trials")
-async def get_trials():
+async def get_trials(hospital: Optional[str] = None):
     """Return drug trials from MongoDB with eligibility estimates (cached)."""
     import random as _rand
 
@@ -540,8 +560,8 @@ async def get_trials():
         # Log trials view to blockchain audit trail (throttled)
         _log_audit(
             action="TRIALS_VIEWED",
-            details=f"Clinical trials accessed ({len(trials)} trials listed)",
-            actor="System",
+            details=f"Clinical trials accessed by {hospital or 'Unknown Hospital'} ({len(trials)} trials listed)",
+            actor=hospital or "Unknown Hospital",
             record_count=len(trials),
         )
 
@@ -606,7 +626,7 @@ async def get_eligible_patients_for_drug(
                 blockchain_logger.log_event(
                     action="ELIGIBILITY_SCREEN",
                     details=f"{drug_name}: {eligible_count} eligible, {not_eligible_count} not eligible out of {len(all_p)} patients (federated){hosp_detail}",
-                    actor=hospital or "System",
+                    actor=hospital or "Unknown Hospital",
                     record_count=eligible_count + not_eligible_count,
                     metadata={"drug": drug_name, "eligible": eligible_count, "not_eligible": not_eligible_count,
                               "hospital_eligible": hospital_eligible_count, "hospital_not_eligible": hospital_not_eligible_count,
@@ -671,7 +691,6 @@ except ImportError:
 
 UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads")
 CSV_ARCHIVE_DIR = os.path.join(UPLOAD_DIR, "csv_archive")
-TRAINING_CSV_FALLBACK = os.path.join(os.path.dirname(__file__), "..", "mimic_adapted.csv")
 
 _upload_progress: Dict[str, Dict] = {}
 
@@ -723,19 +742,8 @@ async def upload_file(file: UploadFile = File(...), hospital: Optional[str] = No
 
         # Regenerate federated training CSV
         _upload_progress[upload_id] = {"percent": 80, "stage": "Generating training CSV..."}
-        if new_patients_list:
-            try:
-                from preprocessing import normalise
-                import pandas as _pd
-                full_df = _pd.DataFrame(new_patients_list)
-                if "comorbidities" not in full_df.columns:
-                    full_df["comorbidities"] = [[] for _ in range(len(full_df))]
-                generate_federated_training_csv(
-                    normalise(full_df, default_hospital="All"),
-                    TRAINING_CSV_FALLBACK,
-                )
-            except Exception as e:
-                print(f"[PREPROCESS] CSV generation error (non-fatal): {e}")
+        # Data is now in MongoDB — no need to regenerate CSV files
+        # FL training loads directly from MongoDB via data_utils.py
 
         total_patients = await db.count_patients()
         new_patients = len(new_patients_list)

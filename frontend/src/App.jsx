@@ -34,7 +34,7 @@ function App() {
       setActiveTab(tabId);
       try { localStorage.setItem('activeTab', tabId); } catch { /* ignore */ }
       const tabLabel = TABS.find(t => t.id === tabId)?.label || tabId;
-      apiService.logActivity('TAB_NAVIGATION', `Navigated to ${tabLabel}`, user?.username || 'System');
+      apiService.logActivity('TAB_NAVIGATION', `Navigated to ${tabLabel}`, user?.hospital_name || 'Unknown Hospital');
     }
   };
 
@@ -58,7 +58,7 @@ function App() {
   const { logs: blockchainLogs, loading: bcLoading } = useBlockchainLogs(activeTab === 'blockchain');
 
   const handleLogout = () => {
-    apiService.logActivity('USER_LOGOUT', `User '${user?.username}' logged out`, user?.username || 'System');
+    apiService.logActivity('USER_LOGOUT', `User '${user?.username}' logged out from ${user?.hospital_name}`, user?.hospital_name || 'Unknown Hospital');
     localStorage.removeItem('user');
     localStorage.removeItem('isAuthenticated');
     localStorage.removeItem('activeTab');

@@ -41,7 +41,7 @@ class MedicalClient(fl.client.NumPyClient):
 
         return loss, len(self.X_test), {"accuracy": accuracy}
 
-def create_clients(num_clients: int = 3) -> List[MedicalClient]:
+def create_clients(num_clients: int = 5) -> List[MedicalClient]:
     """
     Create simulated clients with partitioned data.
 
@@ -91,7 +91,7 @@ if __name__ == "__main__":
     import sys
     if len(sys.argv) > 1:
         client_id = int(sys.argv[1])
-        clients = create_clients(3)
+        clients = create_clients(5)
         start_client(clients[client_id])
     else:
         print("Usage: python client.py <client_id>")

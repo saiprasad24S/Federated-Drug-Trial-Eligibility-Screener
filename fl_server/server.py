@@ -88,9 +88,9 @@ class FederatedServer:
     def get_strategy(self) -> fl.server.strategy.Strategy:
         """Return the federated learning strategy."""
         return fl.server.strategy.FedAvg(
-            min_fit_clients=3,
-            min_evaluate_clients=3,
-            min_available_clients=3,
+            min_fit_clients=5,
+            min_evaluate_clients=5,
+            min_available_clients=5,
             evaluate_fn=self.evaluate_fn,
             on_fit_config_fn=self.evaluate_config,
         )

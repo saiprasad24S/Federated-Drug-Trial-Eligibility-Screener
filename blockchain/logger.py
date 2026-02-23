@@ -279,6 +279,16 @@ class BlockchainLogger:
         # Track rounds to avoid duplicates (in-memory). For robust uniqueness, also check on-chain.
         self._logged_rounds = set()
 
+        # Audit log support (persisted to MongoDB, same interface as MockBlockchainLogger)
+        self._audit_logs: list = []
+        self._audit_lock = threading.Lock()
+        self._db_module = None
+        try:
+            import database as _db
+            self._db_module = _db
+        except ImportError:
+            pass
+
         try:
             self._init_blockchain()
             # Start worker thread
@@ -728,6 +738,72 @@ class BlockchainLogger:
             separators=(",", ":"),
         )
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+    # ----------------- Audit Logging (MongoDB-persisted) -----------------
+    def _generate_tx_hash(self, seed: str = "") -> str:
+        """Generate a realistic-looking transaction hash."""
+        raw = f"{seed}_{time.time()}_{len(self._audit_logs)}"
+        return "0x" + hashlib.sha256(raw.encode()).hexdigest()[:40]
+
+    def _persist_audit_to_mongo(self, entry: dict) -> None:
+        """Write a single audit log entry to MongoDB (best-effort)."""
+        if self._db_module is None:
+            return
+        try:
+            self._db_module.insert_audit_log_sync(entry)
+        except Exception as e:
+            logger.warning(f"Could not persist audit log to MongoDB: {e}")
+
+    def log_event(self, action: str, details: str = "", actor: str = "System",
+                  record_count: int = 0, metadata: Dict[str, Any] = None) -> str:
+        """Log a general audit event (patient upload, eligibility check, etc.)."""
+        ts = int(time.time())
+        tx_hash = self._generate_tx_hash(f"{action}_{details}")
+        entry = {
+            "action": action,
+            "details": details,
+            "actor": actor,
+            "record_count": record_count,
+            "timestamp": ts,
+            "txHash": tx_hash,
+            "metadata": metadata or {},
+        }
+        with self._audit_lock:
+            self._audit_logs.append(entry)
+        self._persist_audit_to_mongo(entry)
+        logger.info(f"Audit log: {action} — {details}")
+        return tx_hash
+
+    def log_data_upload(self, data_type: str, source: str, record_count: int,
+                        hospitals: list = None) -> str:
+        """Log a patient data upload event."""
+        hosp_str = ", ".join(hospitals) if hospitals else "Unknown"
+        return self.log_event(
+            action="DATA_UPLOAD",
+            details=f"{data_type} file uploaded from {source} ({record_count} records, hospitals: {hosp_str})",
+            actor=source,
+            record_count=record_count,
+            metadata={"data_type": data_type, "hospitals": hospitals or [], "record_count": record_count},
+        )
+
+    def log_patient_action(self, action: str, patient_count: int = 0,
+                           actor: str = "System", details: str = "") -> str:
+        """Log a patient-related action (view, screen, predict, etc.)."""
+        return self.log_event(
+            action=action,
+            details=details,
+            actor=actor,
+            record_count=patient_count,
+        )
+
+    def get_audit_logs(self) -> list:
+        """Return all audit trail entries, newest first."""
+        with self._audit_lock:
+            return list(reversed(self._audit_logs))
+
+    def get_audit_log_count(self) -> int:
+        """Return total audit log count."""
+        return len(self._audit_logs)
 
     # ----------------- Observability / Health -----------------
     def health_check(self) -> Dict[str, Any]:

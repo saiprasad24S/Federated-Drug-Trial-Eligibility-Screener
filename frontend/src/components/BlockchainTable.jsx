@@ -103,7 +103,6 @@ const BlockchainTable = memo(function BlockchainTable({ blockchainData = [], loa
                 <table className="min-w-full w-full table-auto text-left themed-table">
                   <thead>
                     <tr>
-                      <th className="px-3 py-2.5 w-10">#</th>
                       <th className="px-3 py-2.5">Action</th>
                       <th className="px-3 py-2.5">Details</th>
                       <th className="px-3 py-2.5">Actor</th>
@@ -123,7 +122,6 @@ const BlockchainTable = memo(function BlockchainTable({ blockchainData = [], loa
                           animate={{ opacity: 1, x: 0 }}
                           transition={shouldAnimate ? { delay: idx * 0.015, duration: 0.15 } : { duration: 0 }}
                         >
-                          <td className="px-3 py-3 text-sm" style={{ color: 'var(--text-tertiary)' }}>{data.length - idx}</td>
                           <td className="px-3 py-3 align-top">
                             <span
                               className="badge"

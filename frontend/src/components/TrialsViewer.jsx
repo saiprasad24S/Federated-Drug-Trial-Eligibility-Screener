@@ -38,7 +38,7 @@ export default function TrialsViewer({ user }) {
   useEffect(() => { loadTrials(); }, []);
 
   const loadTrials = async () => {
-    try { setLoading(true); const response = await apiService.getTrials(); setTrials(response.trials || []); }
+    try { setLoading(true); const response = await apiService.getTrials(hospitalName); setTrials(response.trials || []); }
     catch (error) { console.error('Error loading trials:', error); }
     finally { setLoading(false); }
   };

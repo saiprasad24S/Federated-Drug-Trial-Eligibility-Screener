@@ -2,12 +2,13 @@
 Assign existing patients to hospitals.
 
 Each patient gets a `hospital_name` field matching one of the registered
-hospital accounts.  The distribution is roughly:
+hospital accounts.  The distribution is equal (~20% each):
 
-  - Sai Prasad Medical Center   ~40 %
-  - Apollo Hospitals             ~25 %
-  - Fortis Healthcare            ~20 %
-  - Max Super Specialty Hospital ~15 %
+  - Sai Prasad Medical Science   ~20 %
+  - Apollo Hospitals              ~20 %
+  - KIMS Hospital                 ~20 %
+  - Medicover Hospital            ~20 %
+  - Citizens Hospital             ~20 %
 
 Patients that already have a `hospital_name` are skipped.
 """
@@ -27,10 +28,11 @@ MONGO_URI = os.getenv("MONGO_URI")
 DB_NAME = os.getenv("MONGO_DB_NAME")
 
 HOSPITALS = [
-    ("Sai Prasad Medical Center", 40),
-    ("Apollo Hospitals", 25),
-    ("Fortis Healthcare", 20),
-    ("Max Super Specialty Hospital", 15),
+    ("Sai Prasad Medical Science", 20),
+    ("Apollo Hospitals", 20),
+    ("KIMS Hospital", 20),
+    ("Medicover Hospital", 20),
+    ("Citizens Hospital", 20),
 ]
 
 
