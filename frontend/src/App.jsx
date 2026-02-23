@@ -120,19 +120,25 @@ function App() {
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
                   </motion.button>
                 )}
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: isDark ? 'linear-gradient(135deg, rgba(32,227,178,0.14), rgba(77,171,247,0.1))' : 'linear-gradient(135deg, rgba(99,102,241,0.1), rgba(14,165,233,0.08))', border: `1px solid ${isDark ? 'rgba(32,227,178,0.2)' : 'rgba(99,102,241,0.15)'}` }}>
-                  <svg className="w-5 h-5" style={{ color: 'var(--brand-accent)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                    <path d="M12 2v20" strokeWidth="2" strokeLinecap="round" />
-                    <path d="M5 7h14" strokeWidth="1.5" strokeLinecap="round" />
-                    <path d="M7 12h10" strokeWidth="1.5" strokeLinecap="round" />
-                  </svg>
-                </div>
-                <div className="leading-tight">
-                  <h1 className="text-lg font-bold tracking-tight" style={{ color: 'var(--text-primary)' }}>
-                    FDT<span style={{ color: 'var(--brand-accent)' }}>ES</span>
-                  </h1>
-                  <p className="text-[10px] font-medium tracking-wide uppercase" style={{ color: 'var(--text-tertiary)' }}>Drug Trial Eligibility Screener</p>
-                </div>
+                <button
+                  onClick={() => { setActiveTab('overview'); setTabHistory([]); try { localStorage.setItem('activeTab', 'overview'); } catch {} }}
+                  className="flex items-center gap-3.5 cursor-pointer bg-transparent border-none p-0 m-0 outline-none"
+                  title="Go to Home"
+                >
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: isDark ? 'linear-gradient(135deg, rgba(32,227,178,0.14), rgba(77,171,247,0.1))' : 'linear-gradient(135deg, rgba(99,102,241,0.1), rgba(14,165,233,0.08))', border: `1px solid ${isDark ? 'rgba(32,227,178,0.2)' : 'rgba(99,102,241,0.15)'}` }}>
+                    <svg className="w-5 h-5" style={{ color: 'var(--brand-accent)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                      <path d="M12 2v20" strokeWidth="2" strokeLinecap="round" />
+                      <path d="M5 7h14" strokeWidth="1.5" strokeLinecap="round" />
+                      <path d="M7 12h10" strokeWidth="1.5" strokeLinecap="round" />
+                    </svg>
+                  </div>
+                  <div className="leading-tight text-left">
+                    <h1 className="text-lg font-bold tracking-tight" style={{ color: 'var(--text-primary)' }}>
+                      FDT<span style={{ color: 'var(--brand-accent)' }}>ES</span>
+                    </h1>
+                    <p className="text-[10px] font-medium tracking-wide uppercase" style={{ color: 'var(--text-tertiary)' }}>Drug Trial Eligibility Screener</p>
+                  </div>
+                </button>
               </div>
 
               {/* Right side */}

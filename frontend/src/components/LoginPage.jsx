@@ -227,16 +227,6 @@ export default function LoginPage({ onLogin }) {
             ))}
           </div>
 
-          {/* Animated stats */}
-          <div className="grid grid-cols-3 gap-4 mt-8 p-4 rounded-2xl" style={{
-            background: isDark ? 'rgba(32,227,178,0.04)' : 'rgba(99,102,241,0.03)',
-            border: `1px solid ${isDark ? 'rgba(32,227,178,0.1)' : 'rgba(99,102,241,0.08)'}`,
-          }}>
-            <AnimatedStat value="50000" label="Patients" suffix="+" delay={300} />
-            <AnimatedStat value="12" label="Hospitals" delay={600} />
-            <AnimatedStat value="99" label="Uptime" suffix="%" delay={900} />
-          </div>
-
           {/* Trust indicators */}
           <div className="flex items-center gap-6 mt-8">
             <div className="flex items-center gap-2">
