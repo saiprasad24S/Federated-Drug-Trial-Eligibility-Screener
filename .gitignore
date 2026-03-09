@@ -1,0 +1,62 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+.venv*/
+ENV/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+*.egg-info/
+
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
+.next/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+
+# OS
+Thumbs.db
+
+# Large data files
+medical_data.json
+mimic_adapted.csv
+
+# Uploads
+uploads/
+
+# Build outputs
+frontend/dist/
+frontend/.vite/
+
+# Temp files
+PROJECT_STRUCTURE_AND_CODE.txt
+temp_patch.txt

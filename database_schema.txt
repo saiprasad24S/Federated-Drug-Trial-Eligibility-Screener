@@ -1,0 +1,361 @@
+================================================================================
+FEDERATED DRUG TRIAL ELIGIBILITY SCREENER - DATABASE SCHEMA
+================================================================================
+Database: MongoDB
+Database Name: federated_screener
+Connection: MongoDB Atlas (Cloud)
+
+This document describes the complete schema for all collections in the
+Federated Drug Trial Eligibility Screener application.
+
+================================================================================
+COLLECTIONS OVERVIEW
+================================================================================
+
+1. patients        - Patient medical records (main data)
+2. hospitals       - Hospital login credentials and information
+3. trials          - Drug trial definitions
+4. audit_logs      - Blockchain audit trail entries
+5. training_logs   - Federated learning training round logs
+
+
+================================================================================
+1. PATIENTS COLLECTION
+================================================================================
+Purpose: Stores patient medical records from multiple hospitals
+
+Schema:
+-------
+{
+  patient_id: String          // Unique patient identifier (e.g., "P12345")
+  patient_name: String        // Full name of patient (e.g., "Aarav Kumar")
+  phone: String               // Phone number (e.g., "+91 9876543210")
+  email: String               // Email address (e.g., "aarav.kumar@gmail.com")
+  address: String             // Residential address
+  emergency_contact: String   // Emergency contact person and phone
+  admission_date: String      // Date of admission (YYYY-MM-DD format)
+  age: Integer                // Patient age (0-120)
+  gender: String              // "Male" or "Female"
+  blood_group: String         // Blood type: "A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"
+  disease: String             // Primary diagnosis (e.g., "Diabetes", "Heart Disease", "Cancer")
+  stage: String               // Disease stage: "I", "II", "III", "IV" (or null)
+  comorbidities: Array        // List of additional conditions (e.g., ["Hypertension", "Anemia"])
+  bmi: Float                  // Body Mass Index (15.0 - 40.0 range typically)
+  diagnosis_date: String      // Date of diagnosis (YYYY-MM-DD format)
+  drug: String                // Current medication/treatment
+  eligible: Integer           // Trial eligibility flag: 0 (not eligible) or 1 (eligible)
+  drug_worked: Integer        // Treatment outcome: 0 (no) or 1 (yes)
+  hospital_name: String       // Hospital affiliation (e.g., "Apollo Hospitals")
+}
+
+Indexes:
+--------
+- patient_id (ascending)
+- disease (ascending)
+- age (ascending)
+- gender (ascending)
+- hospital_name (ascending)
+- Compound: (hospital_name, patient_id) - named "hospital_patient_lookup"
+- Compound: (patient_id, patient_name, disease) - named "text_search_fields"
+
+Privacy Notes:
+--------------
+- Personal fields (patient_name, phone, email, address, emergency_contact) are
+  HIDDEN in federated trial screening views
+- Only shown in hospital's own patient management view
+- Anonymized data used for cross-hospital trial matching
+
+Sample Document:
+----------------
+{
+  "patient_id": "P00001",
+  "patient_name": "Aarav Kumar",
+  "phone": "+91 9876543210",
+  "email": "aarav.kumar@gmail.com",
+  "address": "123 MG Road, Bangalore",
+  "emergency_contact": "Priya Kumar — +91 9876543211",
+  "admission_date": "2024-03-15",
+  "age": 45,
+  "gender": "Male",
+  "blood_group": "B+",
+  "disease": "Diabetes",
+  "stage": "II",
+  "comorbidities": ["Hypertension", "Obesity"],
+  "bmi": 28.5,
+  "diagnosis_date": "2023-11-20",
+  "drug": "Metformin",
+  "eligible": 1,
+  "drug_worked": 1,
+  "hospital_name": "Apollo Hospitals"
+}
+
+
+================================================================================
+2. HOSPITALS COLLECTION
+================================================================================
+Purpose: Stores hospital credentials for authentication
+
+Schema:
+-------
+{
+  username: String (unique)   // Login username
+  password: String            // Plain text password (for demo purposes)
+  hospital_name: String       // Full hospital name
+  email: String               // Hospital admin email
+  role: String                // User role (typically "hospital")
+}
+
+Indexes:
+--------
+- username (ascending, unique)
+
+Default Hospitals:
+------------------
+1. Username: SaiPrasad24S     | Password: 2724         | Hospital: Sai Prasad Medical Science
+2. Username: Apollo           | Password: apollo9      | Hospital: Apollo Hospitals
+3. Username: KIMS             | Password: kims8        | Hospital: KIMS Hospital
+4. Username: Medicover        | Password: medicover5   | Hospital: Medicover Hospital
+5. Username: Citizens         | Password: citizens4    | Hospital: Citizens Hospital
+
+Sample Document:
+----------------
+{
+  "username": "Apollo",
+  "password": "apollo9",
+  "hospital_name": "Apollo Hospitals",
+  "email": "admin@apollo.com",
+  "role": "hospital"
+}
+
+
+================================================================================
+3. TRIALS COLLECTION
+================================================================================
+Purpose: Stores drug trial definitions
+
+Schema:
+-------
+{
+  drugName: String (unique)   // Drug/trial name (e.g., "Metformin-XL")
+  indication: String          // Target disease (e.g., "Diabetes")
+  phase: String               // Clinical phase: "Phase I", "Phase II", "Phase III"
+  status: String              // Trial status: "Active", "Completed", "Recruiting"
+  successRate: Float          // Success rate percentage (0-100)
+}
+
+Indexes:
+--------
+- drugName (ascending, unique)
+
+Default Trials (17 total):
+---------------------------
+1.  Metformin-XL      | Diabetes            | Phase III | Active    | 72.4%
+2.  Cardiozen-B       | Heart Disease       | Phase III | Active    | 65.8%
+3.  Oncoguard-7       | Cancer              | Phase II  | Active    | 48.2%
+4.  Pneumofix-R       | Pneumonia           | Phase III | Active    | 81.3%
+5.  Nephrostat-C      | Kidney Disease      | Phase II  | Active    | 59.7%
+6.  Hepatocure-D      | Liver Disease       | Phase III | Active    | 63.1%
+7.  NeuroShield-X     | Stroke              | Phase II  | Active    | 55.9%
+8.  Arthroven-P       | Arthritis           | Phase III | Active    | 70.2%
+9.  Pulmoclear-S      | Asthma              | Phase III | Completed | 76.5%
+10. HyperNorm-T       | Hypertension        | Phase III | Active    | 68.9%
+11. ThyroBalance-F    | Thyroid Disorder    | Phase II  | Active    | 61.4%
+12. Bortezomib        | Multiple Myeloma    | Phase III | Active    | 52.0%
+13. Anemiron-G        | Anemia              | Phase III | Active    | 74.1%
+14. DermaHeal-V       | Skin Disease        | Phase II  | Active    | 66.3%
+15. GastroEase-M      | Gastrointestinal    | Phase III | Active    | 71.0%
+
+Sample Document:
+----------------
+{
+  "drugName": "Metformin-XL",
+  "indication": "Diabetes",
+  "phase": "Phase III",
+  "status": "Active",
+  "successRate": 72.4
+}
+
+
+================================================================================
+4. AUDIT_LOGS COLLECTION
+================================================================================
+Purpose: Blockchain audit trail for system activities (immutable log)
+
+Schema:
+-------
+{
+  timestamp: Timestamp/Date   // When the event occurred
+  action: String              // Event type (e.g., "SYSTEM_STARTUP", "TRAINING_STARTED", "PATIENT_UPLOAD")
+  details: String             // Human-readable description
+  actor: String               // Who/what triggered the event (e.g., "Server", hospital name)
+  record_count: Integer       // Number of records affected (optional)
+  metadata: Object            // Additional structured data (optional)
+  txHash: String              // Blockchain transaction hash (when real blockchain used)
+}
+
+Indexes:
+--------
+- timestamp (descending) - for chronological queries
+- action (ascending) - for filtering by event type
+
+Common Action Types:
+--------------------
+- SYSTEM_STARTUP        - API server started
+- TRAINING_STARTED      - Federated learning training initiated
+- TRAINING_ROUND        - FL round completed
+- TRAINING_COMPLETED    - Full FL training session finished
+- PATIENT_UPLOAD        - New patient data uploaded
+- DATA_ACCESS           - Patient data accessed
+- TAB_NAVIGATION        - User navigated to different section
+
+Sample Document:
+----------------
+{
+  "timestamp": "2026-03-09T09:15:30.123Z",
+  "action": "TRAINING_STARTED",
+  "details": "Federated learning training started with 10 rounds",
+  "actor": "Training Controller",
+  "record_count": 10,
+  "metadata": {
+    "num_rounds": 10,
+    "model_type": "neural_network"
+  }
+}
+
+
+================================================================================
+5. TRAINING_LOGS COLLECTION
+================================================================================
+Purpose: Stores federated learning training round results
+
+Schema:
+-------
+{
+  round: Integer              // Training round number (1, 2, 3, ...)
+  accuracy: Float             // Model accuracy for this round (0.0 - 1.0)
+  loss: Float                 // Model loss for this round
+  timestamp: Timestamp/Date   // When this round completed
+  metrics: Object             // Additional training metrics (optional)
+  participants: Integer       // Number of hospitals/clients participating
+}
+
+Indexes:
+--------
+- round (ascending) - for sequential retrieval
+
+Sample Document:
+----------------
+{
+  "round": 5,
+  "accuracy": 0.8742,
+  "loss": 0.3156,
+  "timestamp": "2026-03-09T09:25:45.678Z",
+  "metrics": {
+    "precision": 0.85,
+    "recall": 0.82,
+    "f1_score": 0.835
+  },
+  "participants": 5
+}
+
+
+================================================================================
+DATA VOLUME (as of March 9, 2026)
+================================================================================
+- Patients:       10,002 records
+- Hospitals:      5 records
+- Trials:         17 records
+- Audit Logs:     764 records
+- Training Logs:  10 records
+
+
+================================================================================
+PRIVACY & SECURITY NOTES
+================================================================================
+
+Hospital Data Isolation:
+------------------------
+- Each hospital can ONLY view/edit their own patients
+- Cross-hospital data sharing is anonymized (no personal info)
+- Federated learning trains models without sharing raw data
+
+Data Fields Classification:
+---------------------------
+Personal (restricted):
+  - patient_name, phone, email, address, emergency_contact
+
+Medical (federated sharing):
+  - patient_id, age, gender, blood_group, disease, stage,
+    comorbidities, bmi, diagnosis_date
+
+Metadata:
+  - hospital_name, admission_date
+
+Authentication:
+--------------
+- Username/password stored in hospitals collection
+- No encryption (demo purposes - should use bcrypt in production)
+
+Blockchain Integration:
+-----------------------
+- Audit logs written to MongoDB and optionally to Ethereum blockchain
+- Provides immutable audit trail for compliance
+- Currently using mock logger with MongoDB persistence
+
+
+================================================================================
+QUERY PATTERNS
+================================================================================
+
+Common Queries:
+--------------
+1. Get hospital's patients:
+   db.patients.find({ hospital_name: "Apollo Hospitals" })
+
+2. Find patients by disease:
+   db.patients.find({ disease: "Diabetes" })
+
+3. Count patients by hospital:
+   db.patients.aggregate([
+     { $group: { _id: "$hospital_name", count: { $sum: 1 } } }
+   ])
+
+4. Get recent audit logs:
+   db.audit_logs.find().sort({ timestamp: -1 }).limit(100)
+
+5. Get training history:
+   db.training_logs.find().sort({ round: 1 })
+
+6. Authenticate hospital:
+   db.hospitals.findOne({ username: "Apollo", password: "apollo9" })
+
+7. Search patients (text search):
+   db.patients.find({
+     $or: [
+       { patient_id: { $regex: "search_term", $options: "i" } },
+       { patient_name: { $regex: "search_term", $options: "i" } },
+       { disease: { $regex: "search_term", $options: "i" } }
+     ]
+   })
+
+
+================================================================================
+STANDARD CSV EXPORT FORMAT
+================================================================================
+
+When exporting patient data to CSV for federated training, the following
+column order is used:
+
+patient_id, patient_name, phone, email, address, emergency_contact,
+admission_date, age, gender, blood_group, disease, stage, comorbidities,
+bmi, diagnosis_date, drug, eligible, drug_worked, hospital
+
+Note: For privacy-preserving federated views, personal fields are excluded.
+
+
+================================================================================
+END OF SCHEMA DOCUMENTATION
+================================================================================
+Generated: March 9, 2026
+Application: Federated Drug Trial Eligibility Screener
+Version: 1.0.0

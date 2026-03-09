@@ -1,0 +1,536 @@
+"""
+V2 trials API.
+
+Architecture notes:
+- Uses `database_v2.py` only (Mongo DB: federated_screener_v2)
+- Never scans all patients for eligibility
+- Every eligibility computation is disease-scoped:
+    trial.disease -> patients where patients.disease == trial.disease
+"""
+
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
+from uuid import uuid4
+
+from fastapi import APIRouter, HTTPException, Query
+
+import database_v2 as db_v2
+from database_v2 import _disease_matches_python
+from models.trial_model_v2 import CreateTrialRequestV2, AddPatientsRequestV2
+
+router = APIRouter(tags=["Trials V2"])
+
+_FEDERATED_COLUMNS = [
+    "patient_id", "age", "gender", "blood_group", "disease",
+    "stage", "comorbidities", "bmi", "diagnosis_date",
+]
+
+
+# Initialize v2 database on module import so router is self-contained
+try:
+    db_v2.init_database_v2()
+except Exception as exc:
+    print(f"[DATABASE_V2] initialization warning: {exc}")
+
+
+def _compute_eligibility(patient: dict, criteria: Dict[str, Any]) -> bool:
+    """Evaluate one patient against trial eligibility criteria."""
+    age = patient.get("age")
+    if age is not None and criteria.get("ageRange"):
+        lo, hi = criteria["ageRange"]
+        if not (lo <= age <= hi):
+            return False
+
+    gender = patient.get("gender", "")
+    allowed_genders = criteria.get("genders", [])
+    if allowed_genders and gender and gender not in allowed_genders:
+        return False
+
+    blood_group = patient.get("blood_group", "")
+    allowed_bg = criteria.get("bloodGroups", [])
+    if allowed_bg and blood_group and blood_group not in allowed_bg:
+        return False
+
+    bmi = patient.get("bmi")
+    if bmi is not None and criteria.get("bmiRange"):
+        lo, hi = criteria["bmiRange"]
+        if not (lo <= bmi <= hi):
+            return False
+
+    stage = patient.get("stage", "")
+    allowed_stages = criteria.get("stages", [])
+    if allowed_stages and stage and stage not in allowed_stages:
+        return False
+
+    return True
+
+
+def _build_criteria_from_patients(patients: List[dict]) -> Dict[str, Any]:
+    """Build default criteria from a disease-scoped patient set."""
+    ages, bmis = [], []
+    genders, blood_groups, stages = set(), set(), set()
+
+    for patient in patients:
+        age = patient.get("age")
+        if age is not None:
+            ages.append(age)
+
+        gender = patient.get("gender")
+        if gender:
+            genders.add(gender)
+
+        blood_group = patient.get("blood_group")
+        if blood_group:
+            blood_groups.add(blood_group)
+
+        bmi = patient.get("bmi")
+        if bmi is not None:
+            bmis.append(bmi)
+
+        stage = patient.get("stage")
+        if stage:
+            stages.add(stage)
+
+    return {
+        "ageRange": [min(ages), max(ages)] if ages else [18, 85],
+        "genders": sorted(genders) if genders else ["Male", "Female"],
+        "bloodGroups": sorted(blood_groups) if blood_groups else [],
+        "bmiRange": [round(min(bmis), 1), round(max(bmis), 1)] if bmis else [15.0, 40.0],
+        "stages": sorted(stages) if stages else [],
+    }
+
+
+def _normalize_stage(value: Any) -> str:
+    txt = str(value or "").strip().upper()
+    if txt.startswith("STAGE "):
+        txt = txt.replace("STAGE ", "", 1).strip()
+    return txt
+
+
+def _matches_search(patient: dict, search_term: str) -> bool:
+    stage_query = _normalize_stage(search_term)
+    is_stage_exact_query = stage_query in {"I", "II", "III", "IV", "V"}
+    if is_stage_exact_query:
+        return _normalize_stage(patient.get("stage")) == stage_query
+
+    fields = [
+        str(patient.get("patient_id", "")),
+        str(patient.get("patient_name", "")),
+        str(patient.get("name", "")),
+        str(patient.get("disease", "")),
+        str(patient.get("stage", "")),
+        str(patient.get("blood_group", "")),
+        str(patient.get("gender", "")),
+        str(patient.get("age", "")),
+        str(patient.get("bmi", "")),
+    ]
+    comorb = patient.get("comorbidities", [])
+    if isinstance(comorb, list):
+        fields.extend(str(x) for x in comorb)
+    else:
+        fields.append(str(comorb))
+    blob = " ".join(fields).lower()
+    return search_term in blob
+
+
+@router.get("/v2/trials")
+async def get_trials_v2():
+    """List v2 trials with disease-specific eligibility estimates.
+
+    Important difference from v1:
+    each trial uses only disease-matching patients for sampling/estimation.
+    """
+    try:
+        trial_defs = await db_v2.get_trials_from_db()
+        trials = []
+        for trial in trial_defs:
+            disease = trial.get("disease") or trial.get("indication")
+            if not disease:
+                continue
+
+            enrolled_ids = trial.get("enrolled_patient_ids") or []
+            enrolled_patients = await db_v2.get_patients_by_ids(enrolled_ids)
+            criteria = trial.get("eligibilityCriteria") or _build_criteria_from_patients(enrolled_patients)
+            eligible_count = sum(1 for patient in enrolled_patients if _compute_eligibility(patient, criteria))
+
+            trials.append(
+                {
+                    "trial_id": trial.get("trial_id"),
+                    "drugName": trial.get("drugName"),
+                    "indication": trial.get("indication"),
+                    "disease": disease,
+                    "phase": trial.get("phase", "Phase III"),
+                    "status": trial.get("status", "Active"),
+                    "successRate": trial.get("successRate", 0.0),
+                    "eligibilityCriteria": criteria,
+                    "patientsEnrolled": len(enrolled_ids),
+                    "eligibleFromCurrent": eligible_count,
+                    "createdAt": trial.get("createdAt"),
+                    "createdByHospital": trial.get("createdByHospital", "Unknown Hospital"),
+                }
+            )
+
+        return {"trials": trials}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.post("/v2/trials")
+async def create_trial_v2(
+    req: CreateTrialRequestV2,
+    hospital: Optional[str] = Query(default=None),
+    auto_enroll: bool = Query(default=True, description="Auto-enroll patients with matching disease"),
+):
+    """Create a v2 trial using the disease-aware schema with optional auto-enrollment."""
+    try:
+        disease = (req.disease or req.indication).strip()
+        if not disease:
+            raise HTTPException(status_code=422, detail="disease/indication is required")
+
+        # Build criteria only from matching disease patients when not provided.
+        if req.eligibilityCriteria:
+            criteria = req.eligibilityCriteria.model_dump()
+        else:
+            disease_sample = await db_v2.get_patient_sample_by_disease(disease, 2000)
+            criteria = _build_criteria_from_patients(disease_sample)
+
+        trial_doc = {
+            "trial_id": f"trial_{uuid4().hex[:12]}",
+            "drugName": req.drugName,
+            "indication": req.indication,
+            "disease": disease,
+            "phase": req.phase,
+            "status": req.status,
+            "successRate": req.successRate,
+            "eligibilityCriteria": criteria,
+            "createdAt": datetime.now(timezone.utc),
+            "createdByHospital": hospital or req.createdByHospital or "Unknown Hospital",
+            "enrolled_patient_ids": [],
+        }
+
+        created = await db_v2.create_trial(trial_doc)
+        
+        # Auto-enroll patients with matching disease if enabled
+        enrollment_result = None
+        if auto_enroll:
+            enrollment_result = await db_v2.auto_enroll_patients_by_disease(req.drugName, disease)
+        
+        return {
+            "message": f"Trial '{req.drugName}' created successfully in v2",
+            "trial": created,
+            "auto_enrollment": enrollment_result,
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.get("/v2/trials/{drug_name}/eligible")
+async def get_eligible_patients_for_drug_v2(
+    drug_name: str,
+    hospital: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 50,
+    tab: str = "eligible",
+    scope: str = "global",
+    search: str = "",
+    store_mapping: bool = Query(default=False),
+):
+    """Return eligibility results for enrolled trial patients only.
+
+    Flow:
+      1. Load trial by `drug_name`
+      2. Read `trial.enrolled_patient_ids`
+      3. Query only those patients
+      4. Evaluate eligibility on enrolled set
+    """
+    try:
+        page_size = min(max(page_size, 10), 200)
+        page = max(page, 1)
+
+        trial = await db_v2.get_trial_by_drug_name(drug_name)
+        if not trial:
+            raise HTTPException(status_code=404, detail=f"Trial '{drug_name}' not found in v2")
+
+        disease = trial.get("disease") or trial.get("indication") or ""
+        enrolled_ids = trial.get("enrolled_patient_ids") or []
+        patients = await db_v2.get_patients_by_ids(enrolled_ids)
+
+        criteria = trial.get("eligibilityCriteria") or _build_criteria_from_patients(patients)
+
+        eligible_indices: List[int] = []
+        not_eligible_indices: List[int] = []
+        mapping_rows = []
+        hospital_eligible_count = 0
+        hospital_not_eligible_count = 0
+        hospital_total = 0
+        hospital_breakdown: Dict[str, Dict[str, int]] = {}
+
+        for idx, patient in enumerate(patients):
+            is_eligible = _compute_eligibility(patient, criteria)
+            if is_eligible:
+                eligible_indices.append(idx)
+            else:
+                not_eligible_indices.append(idx)
+
+            if hospital and patient.get("hospital_name") == hospital:
+                hospital_total += 1
+                if is_eligible:
+                    hospital_eligible_count += 1
+                else:
+                    hospital_not_eligible_count += 1
+
+            h_name = patient.get("hospital_name", "Unknown")
+            if h_name not in hospital_breakdown:
+                hospital_breakdown[h_name] = {"eligible": 0, "not_eligible": 0, "total": 0}
+            hospital_breakdown[h_name]["total"] += 1
+            if is_eligible:
+                hospital_breakdown[h_name]["eligible"] += 1
+            else:
+                hospital_breakdown[h_name]["not_eligible"] += 1
+
+            if store_mapping and trial.get("trial_id"):
+                mapping_rows.append(
+                    {
+                        "patient_id": patient.get("patient_id"),
+                        "eligibility_status": is_eligible,
+                        "evaluated_at": datetime.now(timezone.utc),
+                    }
+                )
+
+        if store_mapping and trial.get("trial_id"):
+            await db_v2.upsert_trial_patient_mappings(trial["trial_id"], mapping_rows)
+
+        eligible_count = len(eligible_indices)
+        not_eligible_count = len(not_eligible_indices)
+
+        requested_scope = (scope or "global").strip().lower()
+        hospital_scope = requested_scope == "hospital" and bool(hospital)
+        search_term = (search or "").strip().lower()
+
+        if tab == "eligible":
+            scoped_ids = eligible_indices
+            total_for_tab = eligible_count
+            if hospital_scope:
+                scoped_ids = [i for i in eligible_indices if patients[i].get("hospital_name") == hospital]
+                total_for_tab = hospital_eligible_count
+        else:
+            scoped_ids = not_eligible_indices
+            total_for_tab = not_eligible_count
+            if hospital_scope:
+                scoped_ids = [i for i in not_eligible_indices if patients[i].get("hospital_name") == hospital]
+                total_for_tab = hospital_not_eligible_count
+
+        if hospital_scope and search_term:
+            scoped_ids = [i for i in scoped_ids if _matches_search(patients[i], search_term)]
+            total_for_tab = len(scoped_ids)
+
+        start = (page - 1) * page_size
+        end = start + page_size
+        page_ids = scoped_ids[start:end]
+        page_patients_raw = [patients[i] for i in page_ids]
+        total_pages = max(1, -(-max(total_for_tab, 1) // page_size))
+
+        if hospital_scope:
+            cols = [c for c in _FEDERATED_COLUMNS if any(c in p for p in page_patients_raw[:5])]
+            page_patients = [{k: p.get(k) for k in cols} for p in page_patients_raw]
+        else:
+            cols = [c for c in _FEDERATED_COLUMNS if any(c in p for p in page_patients_raw[:5])]
+            page_patients = []
+            for idx, patient in enumerate(page_patients_raw):
+                row = {k: patient.get(k) for k in cols if k != "patient_id"}
+                row["patient_id"] = f"ANON-{start + idx + 1:05d}"
+                page_patients.append(row)
+
+        return {
+            "drug": drug_name,
+            "hospital": hospital,
+            "tab": tab,
+            "scope": "hospital" if hospital_scope else "global",
+            "scope_total": total_for_tab,
+            "search": search_term if hospital_scope else "",
+            "patients": page_patients,
+            "columns": cols,
+            "eligible_count": eligible_count,
+            "not_eligible_count": not_eligible_count,
+            "hospital_eligible_count": hospital_eligible_count,
+            "hospital_not_eligible_count": hospital_not_eligible_count,
+            "hospital_total": hospital_total,
+            "hospital_breakdown": hospital_breakdown,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": total_pages,
+            "trial_params": criteria,
+            "privacy_mode": True,
+            "privacy_notice": "Patient identities are anonymized. Only enrolled trial patients are screened in v2.",
+            "enrollment_mode": "manual",
+            "enrolled_count": len(enrolled_ids),
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.delete("/v2/trials/{drug_name}")
+async def delete_trial_v2(drug_name: str):
+    """Delete a trial by drug name."""
+    try:
+        db = db_v2.get_async_db()
+        result = await db.trials.delete_one({"drugName": drug_name})
+        if result.deleted_count == 0:
+            raise HTTPException(status_code=404, detail=f"Trial '{drug_name}' not found")
+        return {"message": f"Trial '{drug_name}' deleted successfully", "deleted": True}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.post("/v2/trials/{drug_name}/patients")
+async def add_patients_to_trial_v2(drug_name: str, req: AddPatientsRequestV2):
+    """Manually enroll patients into a trial.
+
+    req.patient_ids should contain _oid strings (MongoDB ObjectId hex strings).
+    This enforces explicit membership: eligibility runs only for enrolled IDs.
+    """
+    try:
+        trial = await db_v2.get_trial_by_drug_name(drug_name)
+        if not trial:
+            raise HTTPException(status_code=404, detail=f"Trial '{drug_name}' not found in v2")
+
+        disease = trial.get("disease") or trial.get("indication")
+        # req.patient_ids are now _oid strings (ObjectId hex)
+        result = await db_v2.add_patients_to_trial(drug_name, req.patient_ids)
+        updated_trial = await db_v2.get_trial_by_drug_name(drug_name)
+        enrolled = updated_trial.get("enrolled_patient_ids") or []
+
+        return {
+            "message": f"Added {len(req.patient_ids)} patients to trial '{drug_name}'",
+            "trial_id": updated_trial.get("trial_id"),
+            "disease": disease,
+            "added_count": len(req.patient_ids),
+            "requested_count": len(req.patient_ids),
+            "enrolled_count": len(enrolled),
+            "db_matched": result.get("matched", 0),
+            "db_modified": result.get("modified", 0),
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.delete("/v2/trials/{drug_name}/patients")
+async def remove_patients_from_trial_v2(drug_name: str, req: AddPatientsRequestV2):
+    """Remove enrolled patients from a trial."""
+    try:
+        trial = await db_v2.get_trial_by_drug_name(drug_name)
+        if not trial:
+            raise HTTPException(status_code=404, detail=f"Trial '{drug_name}' not found in v2")
+
+        result = await db_v2.remove_patients_from_trial(drug_name, req.patient_ids)
+        updated_trial = await db_v2.get_trial_by_drug_name(drug_name)
+        enrolled = updated_trial.get("enrolled_patient_ids") or []
+
+        return {
+            "message": f"Removed patients from trial '{drug_name}'",
+            "trial_id": updated_trial.get("trial_id"),
+            "removed_requested": len(req.patient_ids),
+            "enrolled_count": len(enrolled),
+            "db_matched": result.get("matched", 0),
+            "db_modified": result.get("modified", 0),
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.get("/v2/trials/{drug_name}/patients")
+async def get_trial_patients_v2(drug_name: str):
+    """Return currently enrolled patients for a trial (manual enrollment set)."""
+    try:
+        trial = await db_v2.get_trial_by_drug_name(drug_name)
+        if not trial:
+            raise HTTPException(status_code=404, detail=f"Trial '{drug_name}' not found in v2")
+        patient_ids = trial.get("enrolled_patient_ids") or []
+        patients = await db_v2.get_patients_by_ids(patient_ids)
+        return {
+            "trial_id": trial.get("trial_id"),
+            "drugName": trial.get("drugName"),
+            "disease": trial.get("disease") or trial.get("indication"),
+            "enrolled_count": len(patient_ids),
+            "patients": patients,
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.get("/v2/trials/{drug_name}/available-patients")
+async def get_available_patients_for_trial_v2(
+    drug_name: str,
+    hospital: Optional[str] = Query(default=None, description="Filter by hospital name"),
+):
+    """
+    Get patients NOT enrolled in this trial, filtered by disease match.
+    
+    Useful for showing a checklist of patients that can be added to the trial.
+    """
+    try:
+        trial = await db_v2.get_trial_by_drug_name(drug_name)
+        if not trial:
+            raise HTTPException(status_code=404, detail=f"Trial '{drug_name}' not found in v2")
+        
+        disease = trial.get("disease") or trial.get("indication")
+        patients = await db_v2.get_available_patients_for_trial(drug_name, hospital, disease)
+        
+        return {
+            "trial_id": trial.get("trial_id"),
+            "drugName": drug_name,
+            "disease": disease,
+            "hospital_filter": hospital,
+            "available_count": len(patients),
+            "patients": patients,
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.post("/v2/trials/{drug_name}/auto-enroll")
+async def auto_enroll_patients_v2(drug_name: str):
+    """
+    Auto-enroll ALL disease-matching patients into this trial.
+    Uses smart substring matching (trial 'Cancer' → all cancer types).
+    """
+    try:
+        trial = await db_v2.get_trial_by_drug_name(drug_name)
+        if not trial:
+            raise HTTPException(status_code=404, detail=f"Trial '{drug_name}' not found in v2")
+
+        disease = trial.get("disease") or trial.get("indication")
+        if not disease:
+            raise HTTPException(status_code=400, detail="Trial has no disease set")
+
+        result = await db_v2.auto_enroll_patients_by_disease(drug_name, disease)
+        total_enrolled = result.get("enrolled_count", 0)
+        patients_found = result.get("patients_found", 0)
+
+        return {
+            "message": f"Auto-enrolled {patients_found} matching patients into trial '{drug_name}' (disease: '{disease}'). Total enrolled: {total_enrolled}",
+            "enrolled_count": total_enrolled,
+            "patients_found": patients_found,
+            "drugName": drug_name,
+            "disease": disease,
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
