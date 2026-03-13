@@ -149,11 +149,11 @@ const BlockchainTable = memo(function BlockchainTable({ blockchainData = [], loa
                 {/* Live pulse indicator */}
                 <motion.div
                   className="flex items-center gap-1.5 ml-2 px-2.5 py-1 rounded-full text-[10px] font-bold"
-                  style={{ background: isDark ? 'rgba(16,185,129,0.1)' : 'rgba(16,185,129,0.08)', color: '#10B981', border: '1px solid rgba(16,185,129,0.2)' }}
+                  style={{ background: isDark ? 'rgba(96,165,250,0.1)' : 'rgba(37,99,235,0.08)', color: isDark ? '#60A5FA' : '#2563EB', border: `1px solid ${isDark ? 'rgba(96,165,250,0.2)' : 'rgba(37,99,235,0.2)'}` }}
                   animate={{ opacity: [1, 0.6, 1] }}
                   transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
                 >
-                  <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#10B981' }} />
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ background: isDark ? '#60A5FA' : '#2563EB' }} />
                   LIVE
                 </motion.div>
               </div>
@@ -198,53 +198,6 @@ const BlockchainTable = memo(function BlockchainTable({ blockchainData = [], loa
             </div>
           </motion.div>
 
-          {/* Action filter chips */}
-          <motion.div className="flex flex-wrap gap-2 mb-4" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-            <motion.button
-              onClick={() => setFilterAction(null)}
-              className="badge text-[11px] cursor-pointer transition-all"
-              style={{
-                background: !filterAction ? 'var(--brand-primary)' : 'var(--bg-tertiary)',
-                color: !filterAction ? '#fff' : 'var(--text-tertiary)',
-                border: `1px solid ${!filterAction ? 'var(--brand-primary)' : 'var(--border-primary)'}`,
-              }}
-              whileHover={{ scale: 1.08 }}
-              whileTap={{ scale: 0.95 }}
-            >
-              All ({data.length})
-            </motion.button>
-            {Object.entries(ACTION_ICONS).map(([key, icon]) => {
-              const count = actionSummary[key] || 0;
-              if (count === 0) return null;
-              const isActive = filterAction === key;
-              const colors = getActionColor(key);
-              return (
-                <motion.button
-                  key={key}
-                  onClick={() => setFilterAction(isActive ? null : key)}
-                  className="badge text-[11px] cursor-pointer transition-all"
-                  style={{
-                    background: isActive ? colors.text : colors.bg,
-                    color: isActive ? '#fff' : colors.text,
-                    border: `1px solid ${colors.border}`,
-                  }}
-                  whileHover={{ scale: 1.08 }}
-                  whileTap={{ scale: 0.95 }}
-                  layout
-                >
-                  <span>{icon}</span>
-                  <span>{key.replace(/_/g, ' ')}</span>
-                  <motion.span
-                    key={count}
-                    className="font-bold ml-1"
-                    initial={{ scale: 1.5 }}
-                    animate={{ scale: 1 }}
-                    transition={{ type: 'spring', stiffness: 500, damping: 20 }}
-                  >({count})</motion.span>
-                </motion.button>
-              );
-            })}
-          </motion.div>
 
           {loading && data.length === 0 ? (
             <TableSkeleton cols={6} rows={5} />

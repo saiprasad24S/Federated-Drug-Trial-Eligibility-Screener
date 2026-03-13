@@ -31,10 +31,10 @@
   /* Brand */
   --brand-primary: #2563EB;
   --brand-secondary: #1D4ED8;
-  --brand-accent: #22C55E;
-  --brand-accent-hover: #16A34A;
+  --brand-accent: #3B82F6;
+  --brand-accent-hover: #2563EB;
   --brand-gradient: linear-gradient(135deg, #2563EB, #1D4ED8);
-  --brand-gradient-warm: linear-gradient(135deg, #2563EB, #22C55E);
+  --brand-gradient-warm: linear-gradient(135deg, #2563EB, #60A5FA);
 
   /* Borders */
   --border-primary: #E7E1DA;
@@ -52,10 +52,10 @@
   --shadow-card-hover: 0 14px 30px rgba(15, 23, 42, 0.08);
 
   /* Status */
-  --status-success: #16A34A;
-  --status-success-bg: linear-gradient(135deg, rgba(34,197,94,0.12), rgba(34,197,94,0.04));
-  --status-success-bg-solid: #ECFDF5;
-  --status-success-border: rgba(34,197,94,0.2);
+  --status-success: #2563EB;
+  --status-success-bg: linear-gradient(135deg, rgba(37,99,235,0.12), rgba(37,99,235,0.04));
+  --status-success-bg-solid: #EFF6FF;
+  --status-success-border: rgba(37,99,235,0.2);
   --status-error: #EF4444;
   --status-error-bg: linear-gradient(135deg, rgba(239,68,68,0.1), rgba(239,68,68,0.03));
   --status-error-bg-solid: #FEF2F2;
@@ -71,10 +71,10 @@
 
   /* Charts */
   --chart-line-1: #2563EB;
-  --chart-line-2: #22C55E;
+  --chart-line-2: #3B82F6;
   --chart-line-3: #0EA5E9;
   --chart-area-1: rgba(37,99,235,0.12);
-  --chart-area-2: rgba(34,197,94,0.1);
+  --chart-area-2: rgba(59,130,246,0.1);
   --chart-grid: rgba(100,116,139,0.15);
   --chart-bg: linear-gradient(180deg, rgba(37,99,235,0.03) 0%, transparent 100%);
 
@@ -83,10 +83,10 @@
   --kpi-blue-bg-solid: #EFF6FF;
   --kpi-blue-text: #1D4ED8;
   --kpi-blue-accent: #2563EB;
-  --kpi-green-bg: linear-gradient(135deg, rgba(34,197,94,0.12), rgba(34,197,94,0.05));
-  --kpi-green-bg-solid: #ECFDF5;
-  --kpi-green-text: #15803D;
-  --kpi-green-accent: #22C55E;
+  --kpi-green-bg: linear-gradient(135deg, rgba(37,99,235,0.12), rgba(37,99,235,0.05));
+  --kpi-green-bg-solid: #EFF6FF;
+  --kpi-green-text: #1D4ED8;
+  --kpi-green-accent: #3B82F6;
   --kpi-teal-bg: linear-gradient(135deg, rgba(14,165,233,0.1), rgba(14,165,233,0.04));
   --kpi-teal-bg-solid: #F0F9FF;
   --kpi-teal-text: #0284C7;
@@ -145,58 +145,58 @@
   --text-inverse: #0F172A;
 
   /* Brand */
-  --brand-primary: #22D3EE;
-  --brand-secondary: #06B6D4;
-  --brand-accent: #22D3EE;
-  --brand-accent-hover: #0891B2;
-  --brand-gradient: linear-gradient(135deg, #22D3EE, #06B6D4);
-  --brand-gradient-warm: linear-gradient(135deg, #22D3EE, #A3E635);
+  --brand-primary: #60A5FA;
+  --brand-secondary: #3B82F6;
+  --brand-accent: #93C5FD;
+  --brand-accent-hover: #60A5FA;
+  --brand-gradient: linear-gradient(135deg, #60A5FA, #3B82F6);
+  --brand-gradient-warm: linear-gradient(135deg, #60A5FA, #93C5FD);
 
   /* Borders */
   --border-primary: #374151;
   --border-secondary: #4B5563;
-  --border-focus: #22D3EE;
-  --border-glow: 0 0 0 3px rgba(34,211,238,0.2);
+  --border-focus: #60A5FA;
+  --border-glow: 0 0 0 3px rgba(96,165,250,0.2);
 
   /* Shadows + Glow */
   --shadow-sm: 0 6px 16px rgba(0,0,0,0.3);
   --shadow-md: 0 12px 30px rgba(0,0,0,0.4);
   --shadow-lg: 0 20px 45px rgba(0,0,0,0.6);
   --shadow-xl: 0 25px 60px rgba(0,0,0,0.6);
-  --shadow-glow: 0 0 18px rgba(34,211,238,0.08);
+  --shadow-glow: 0 0 18px rgba(96,165,250,0.08);
   --shadow-header: 0 10px 24px rgba(0,0,0,0.45);
   --shadow-card-hover: 0 20px 45px rgba(0,0,0,0.6);
 
   /* Status */
-  --status-success: #A3E635;
-  --status-success-bg: rgba(163,230,53,0.1);
-  --status-success-border: rgba(163,230,53,0.22);
+  --status-success: #93C5FD;
+  --status-success-bg: rgba(96,165,250,0.1);
+  --status-success-border: rgba(96,165,250,0.22);
   --status-error: #FF6B6B;
   --status-error-bg: rgba(255, 107, 107, 0.08);
   --status-error-border: rgba(255, 107, 107, 0.2);
   --status-warning: #F59E0B;
   --status-warning-bg: rgba(245,158,11,0.1);
   --status-warning-border: rgba(245,158,11,0.2);
-  --status-info: #22D3EE;
-  --status-info-bg: rgba(34,211,238,0.1);
-  --status-info-border: rgba(34,211,238,0.2);
+  --status-info: #60A5FA;
+  --status-info-bg: rgba(96,165,250,0.1);
+  --status-info-border: rgba(96,165,250,0.2);
 
   /* Charts */
-  --chart-line-1: #22D3EE;
-  --chart-line-2: #A3E635;
+  --chart-line-1: #60A5FA;
+  --chart-line-2: #93C5FD;
   --chart-line-3: #F59E0B;
-  --chart-area-1: rgba(34,211,238,0.12);
-  --chart-area-2: rgba(163,230,53,0.1);
+  --chart-area-1: rgba(96,165,250,0.12);
+  --chart-area-2: rgba(147,197,253,0.1);
   --chart-grid: rgba(156,163,175,0.14);
   --chart-bg: linear-gradient(180deg, rgba(30,41,59,0.4) 0%, transparent 100%);
 
   /* KPI */
-  --kpi-blue-bg: rgba(34,211,238,0.12);
-  --kpi-blue-text: #67E8F9;
-  --kpi-green-bg: rgba(163,230,53,0.12);
-  --kpi-green-text: #BEF264;
-  --kpi-teal-bg: rgba(34,211,238,0.1);
-  --kpi-teal-text: #67E8F9;
+  --kpi-blue-bg: rgba(96,165,250,0.12);
+  --kpi-blue-text: #93C5FD;
+  --kpi-green-bg: rgba(96,165,250,0.12);
+  --kpi-green-text: #BFDBFE;
+  --kpi-teal-bg: rgba(96,165,250,0.1);
+  --kpi-teal-text: #93C5FD;
   --kpi-purple-bg: rgba(30,41,59,0.8);
   --kpi-purple-text: #CBD5E1;
   --kpi-orange-bg: rgba(245,158,11,0.12);
@@ -355,35 +355,35 @@ body {
   color: #FFFFFF;
 }
 [data-theme='dark'] .btn-primary {
-  background: #22D3EE;
+  background: #60A5FA;
   color: #0B0F14;
-  box-shadow: 0 8px 20px rgba(34,211,238,0.14);
+  box-shadow: 0 8px 20px rgba(96,165,250,0.14);
 }
 .btn-primary:hover { 
   background: #1D4ED8;
   box-shadow: var(--shadow-lg);
 }
 [data-theme='light'] .btn-accent {
-  background: #22C55E;
+  background: #3B82F6;
   color: #fff;
   box-shadow: var(--shadow-md);
 }
 [data-theme='light'] .btn-accent:hover {
-  background: #16A34A;
+  background: #2563EB;
   box-shadow: var(--shadow-lg);
 }
 [data-theme='dark'] .btn-primary:hover {
-  background: #06B6D4;
-  box-shadow: 0 10px 22px rgba(34,211,238,0.18);
+  background: #3B82F6;
+  box-shadow: 0 10px 22px rgba(96,165,250,0.18);
 }
 [data-theme='dark'] .btn-accent {
-  background: #A3E635;
+  background: #93C5FD;
   color: #111827;
-  box-shadow: 0 8px 20px rgba(163,230,53,0.12);
+  box-shadow: 0 8px 20px rgba(147,197,253,0.12);
 }
 [data-theme='dark'] .btn-accent:hover {
-  background: #84CC16;
-  box-shadow: 0 10px 24px rgba(163,230,53,0.18);
+  background: #60A5FA;
+  box-shadow: 0 10px 24px rgba(96,165,250,0.18);
 }
 .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; filter: none; box-shadow: none; }
 .btn-secondary { 
@@ -415,7 +415,7 @@ body {
   box-shadow: var(--border-glow);
   background: var(--bg-card);
 }
-[data-theme='dark'] .input:focus { box-shadow: 0 0 0 3px rgba(34,211,238,0.2); }
+[data-theme='dark'] .input:focus { box-shadow: 0 0 0 3px rgba(96,165,250,0.2); }
 
 /* ================================================================
    BADGE — Premium Pill
@@ -512,11 +512,11 @@ body {
   border: 1px solid transparent;
 }
 [data-theme='dark'] .tab-active {
-  background: rgba(34,211,238,0.15);
+  background: rgba(96,165,250,0.15);
   color: #F9FAFB !important;
   box-shadow: 0 8px 20px rgba(0,0,0,0.35);
-  border: 1px solid rgba(34,211,238,0.2);
-  border-left: 3px solid #22D3EE;
+  border: 1px solid rgba(96,165,250,0.2);
+  border-left: 3px solid #60A5FA;
 }
 .tab-inactive {
   color: var(--text-tertiary);
@@ -703,7 +703,7 @@ html { scroll-behavior: smooth; }
 
 /* Tab active indicator glow */
 [data-theme='dark'] .tab-active {
-  box-shadow: 0 8px 20px rgba(0,0,0,0.35), 0 0 15px rgba(34,211,238,0.1);
+  box-shadow: 0 8px 20px rgba(0,0,0,0.35), 0 0 15px rgba(96,165,250,0.1);
 }
 [data-theme='light'] .tab-active {
   box-shadow: var(--shadow-md), 0 0 15px rgba(37,99,235,0.08);
@@ -727,5 +727,5 @@ html { scroll-behavior: smooth; }
   color: var(--text-primary);
 }
 [data-theme='dark'] ::selection {
-  background: rgba(34, 211, 238, 0.25);
+  background: rgba(96, 165, 250, 0.25);
 }

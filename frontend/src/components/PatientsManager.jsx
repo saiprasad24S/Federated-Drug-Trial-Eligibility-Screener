@@ -270,15 +270,7 @@ export default function PatientsManager({ user }) {
           ))}
         </div>
 
-        {/* Column badges */}
-        {columns.length > 0 && (
-          <div className="mb-3 flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-medium" style={{ color: 'var(--text-tertiary)' }}>Columns:</span>
-            {columns.map(col => (
-              <span key={col} className="badge" style={{ background: 'var(--bg-tertiary)', color: 'var(--text-secondary)', border: '1px solid var(--border-primary)' }}>{humanLabel(col)}</span>
-            ))}
-          </div>
-        )}
+
 
         {/* Table */}
         {loading && !showUploadForm ? (

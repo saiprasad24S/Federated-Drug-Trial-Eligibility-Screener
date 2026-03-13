@@ -7,7 +7,7 @@ import { useThemeStore } from '../stores/themeStore';
 import { staggerContainer, staggerItem } from '../utils/motionVariants';
 
 const LIGHT_CHART_COLORS = ['#6366F1', '#0EA5E9', '#A855F7', '#10B981', '#F97316', '#F43F5E'];
-const DARK_CHART_COLORS = ['#22D3EE', '#A3E635', '#F59E0B', '#60A5FA', '#38BDF8', '#FBBF24'];
+const DARK_CHART_COLORS = ['#60A5FA', '#93C5FD', '#F59E0B', '#BFDBFE', '#38BDF8', '#FBBF24'];
 
 /* ── Animated Counter Hook ── */
 function useAnimatedCounter(target, duration = 1200) {
@@ -276,8 +276,8 @@ export default function Overview({ onNavigate, user }) {
               transition={{ delay: 0.3 }}
             >
               <div className="flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-full"
-                style={{ background: 'var(--kpi-green-bg-solid)', color: 'var(--kpi-green-text)', border: '1px solid var(--status-success-border)' }}>
-                <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: 'var(--kpi-green-text)' }} />
+                style={{ background: 'var(--kpi-blue-bg-solid)', color: 'var(--kpi-blue-text)', border: '1px solid var(--status-info-border)' }}>
+                <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: 'var(--brand-primary)' }} />
                 System Online
               </div>
               <div className="flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-full"
