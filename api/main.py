@@ -354,7 +354,7 @@ async def get_stats(hospital: Optional[str] = None):
         return {
             "total_patients": stats.get("total_patients", 0),
             "global_total_patients": stats.get("global_total_patients", 0),
-            "total_trials": len(trials),
+            "total_trials": sum(1 for t in trials if t.get("status", "").lower() == "active"),
             "total_hospitals": len(hospital_counts) or 3,
             "unique_diseases": stats.get("unique_diseases", 0),
             "drug_trials": len(trials),

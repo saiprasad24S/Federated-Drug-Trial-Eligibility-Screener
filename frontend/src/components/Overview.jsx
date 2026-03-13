@@ -1,4 +1,4 @@
-import React, { useState, useEffect, memo, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, memo, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, AreaChart, Area } from 'recharts';
 import { apiService } from '../services/apiService';
@@ -8,6 +8,48 @@ import { staggerContainer, staggerItem } from '../utils/motionVariants';
 
 const LIGHT_CHART_COLORS = ['#6366F1', '#0EA5E9', '#A855F7', '#10B981', '#F97316', '#F43F5E'];
 const DARK_CHART_COLORS = ['#22D3EE', '#A3E635', '#F59E0B', '#60A5FA', '#38BDF8', '#FBBF24'];
+
+/* ── Animated Counter Hook ── */
+function useAnimatedCounter(target, duration = 1200) {
+  const [count, setCount] = useState(0);
+  const prevTarget = useRef(0);
+  useEffect(() => {
+    const num = typeof target === 'number' ? target : parseInt(target, 10);
+    if (isNaN(num)) { setCount(target); return; }
+    const start = prevTarget.current;
+    prevTarget.current = num;
+    const diff = num - start;
+    if (diff === 0) { setCount(num); return; }
+    const startTime = performance.now();
+    let raf;
+    const step = (now) => {
+      const elapsed = now - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3); // ease-out cubic
+      setCount(Math.round(start + diff * eased));
+      if (progress < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [target, duration]);
+  return typeof target === 'number' ? count : target;
+}
+
+/* ── Animated Value Display ── */
+const AnimatedValue = memo(function AnimatedValue({ value, accentColor }) {
+  const display = useAnimatedCounter(value);
+  return (
+    <motion.span
+      key={value}
+      initial={{ opacity: 0.6, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4 }}
+      style={{ color: 'var(--text-primary)' }}
+    >
+      {typeof display === 'number' ? display.toLocaleString() : display}
+    </motion.span>
+  );
+});
 
 /* ── Premium KPI Card (Clickable) ── */
 const KPICard = memo(function KPICard({ icon, iconBg, iconColor, label, value, trend, accentColor, onClick, isActive, actionLabel }) {
@@ -26,7 +68,7 @@ const KPICard = memo(function KPICard({ icon, iconBg, iconColor, label, value, t
               </div>
               <div className="min-w-0">
                 <p className="text-[10px] font-bold uppercase tracking-[0.1em]" style={{ color: 'var(--text-tertiary)' }}>{label}</p>
-                <p className="text-2xl font-black tabular-nums mt-0.5" style={{ color: 'var(--text-primary)' }}>{value}</p>
+                <p className="text-2xl font-black tabular-nums mt-0.5"><AnimatedValue value={value} accentColor={accentColor} /></p>
               </div>
             </div>
             {trend != null && (
@@ -167,6 +209,13 @@ export default function Overview({ onNavigate, user }) {
     }));
   }, [stats]);
 
+  const greeting = useMemo(() => {
+    const h = new Date().getHours();
+    if (h < 12) return 'Good Morning';
+    if (h < 17) return 'Good Afternoon';
+    return 'Good Evening';
+  }, []);
+
   if (loadingStats) {
     return (
       <div className="space-y-4">
@@ -188,8 +237,62 @@ export default function Overview({ onNavigate, user }) {
     { key: 'drugTrials', icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" /></svg>, iconBg: 'var(--kpi-rose-bg-solid)', iconColor: 'var(--kpi-rose-text)', label: 'Drug Trials', value: stats.drugTrials, trend: -2, accentColor: 'var(--kpi-rose-accent)', actionLabel: 'View Drug Trials' },
   ];
 
+
   return (
     <motion.div className="space-y-6" variants={staggerContainer} initial="hidden" animate="visible">
+      {/* ── Welcome Banner ── */}
+      <motion.div variants={staggerItem}>
+        <div className="relative overflow-hidden rounded-2xl p-6" style={{
+          background: isDark
+            ? 'linear-gradient(135deg, rgba(32,227,178,0.08) 0%, rgba(77,171,247,0.06) 50%, rgba(167,139,250,0.05) 100%)'
+            : 'linear-gradient(135deg, rgba(99,102,241,0.08) 0%, rgba(14,165,233,0.06) 50%, rgba(168,85,247,0.04) 100%)',
+          border: `1px solid ${isDark ? 'rgba(32,227,178,0.12)' : 'rgba(99,102,241,0.12)'}`,
+        }}>
+          <div className="flex items-center justify-between relative z-10">
+            <div>
+              <motion.h2
+                className="text-xl font-bold"
+                style={{ color: 'var(--text-primary)' }}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.1 }}
+              >
+                {greeting}, <span style={{ color: 'var(--brand-accent)' }}>{user?.username || 'Doctor'}</span> 👋
+              </motion.h2>
+              <motion.p
+                className="text-sm mt-1"
+                style={{ color: 'var(--text-tertiary)' }}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.2 }}
+              >
+                {user?.hospital_name || 'Hospital'} Dashboard · Federated Drug Trial Eligibility Screener
+              </motion.p>
+            </div>
+            <motion.div
+              className="hidden sm:flex items-center gap-4"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.3 }}
+            >
+              <div className="flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-full"
+                style={{ background: 'var(--kpi-green-bg-solid)', color: 'var(--kpi-green-text)', border: '1px solid var(--status-success-border)' }}>
+                <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: 'var(--kpi-green-text)' }} />
+                System Online
+              </div>
+              <div className="flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-full"
+                style={{ background: isDark ? 'rgba(96,165,250,0.1)' : 'rgba(37,99,235,0.08)', color: 'var(--brand-primary)', border: `1px solid ${isDark ? 'rgba(96,165,250,0.2)' : 'rgba(37,99,235,0.15)'}` }}>
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                HIPAA Compliant
+              </div>
+            </motion.div>
+          </div>
+          {/* Decorative background element */}
+          <div className="absolute -right-8 -top-8 w-32 h-32 rounded-full opacity-[0.04]" style={{ background: 'var(--brand-accent)' }} />
+          <div className="absolute -right-4 -bottom-4 w-20 h-20 rounded-full opacity-[0.03]" style={{ background: 'var(--brand-primary)' }} />
+        </div>
+      </motion.div>
+
       {/* KPI Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {kpis.map((k) => (
@@ -283,7 +386,7 @@ export default function Overview({ onNavigate, user }) {
                               <div className="flex-1 h-3 rounded-full overflow-hidden" style={{ background: 'var(--bg-tertiary)' }}>
                                 <motion.div className="h-full rounded-full" initial={{ width: 0 }} animate={{ width: `${pct}%` }}
                                   transition={{ duration: 0.8, ease: 'easeOut', delay: idx * 0.05 }}
-                                  style={{ background: CHART_COLORS[idx % CHART_COLORS.length] }} />
+                                  style={{ background: chartColors[idx % chartColors.length] }} />
                               </div>
                               <span className="text-xs font-black tabular-nums w-12 text-right" style={{ color: 'var(--text-secondary)' }}>{d.count}</span>
                             </motion.div>

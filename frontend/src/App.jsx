@@ -33,8 +33,10 @@ function App() {
       setTabHistory((prev) => [...prev, activeTab]);
       setActiveTab(tabId);
       try { localStorage.setItem('activeTab', tabId); } catch { /* ignore */ }
-      const tabLabel = TABS.find(t => t.id === tabId)?.label || tabId;
-      apiService.logActivity('TAB_NAVIGATION', `Navigated to ${tabLabel}`, user?.hospital_name || 'Unknown Hospital');
+      if (tabId !== 'blockchain') {
+        const tabLabel = TABS.find(t => t.id === tabId)?.label || tabId;
+        apiService.logActivity('TAB_NAVIGATION', `Navigated to ${tabLabel}`, user?.hospital_name || 'Unknown Hospital');
+      }
     }
   };
 
