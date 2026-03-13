@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { apiService } from '../services/apiService';
 import { Card, Button, TableSkeleton } from './ui';
 import { useThemeStore } from '../stores/themeStore';
-import { staggerItem } from '../utils/motionVariants';
+import { staggerItem, popIn, slideUp } from '../utils/motionVariants';
 
 /* ── helpers ─────────────────────────────────────────────────── */
 const humanLabel = (key) => {
@@ -209,8 +209,8 @@ export default function PatientsManager({ user }) {
             >
               <h3 className="text-lg font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>Upload Patient Data</h3>
               <div className="space-y-4">
-                <label className="w-full flex flex-col items-center justify-center px-4 py-6 rounded-lg cursor-pointer" style={{ background: 'var(--bg-card)', border: '2px dashed var(--brand-primary)', color: 'var(--brand-primary)' }}>
-                  <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20"><path d="M16.88 9.1A4 4 0 0 1 16 17H4a5 5 0 0 1-1-9.9V7a3 3 0 0 1 6-3h2a3 3 0 0 1 2 .9l5.07 5.07a1 1 0 1 1-1.42 1.42L12.07 7H10" /></svg>
+                <label className="w-full flex flex-col items-center justify-center px-4 py-6 rounded-lg cursor-pointer group transition-all duration-200 hover:scale-[1.01]" style={{ background: 'var(--bg-card)', border: '2px dashed var(--brand-primary)', color: 'var(--brand-primary)' }}>
+                  <svg className="w-8 h-8 transition-transform duration-300 group-hover:scale-110 group-hover:-translate-y-1" fill="currentColor" viewBox="0 0 20 20"><path d="M16.88 9.1A4 4 0 0 1 16 17H4a5 5 0 0 1-1-9.9V7a3 3 0 0 1 6-3h2a3 3 0 0 1 2 .9l5.07 5.07a1 1 0 1 1-1.42 1.42L12.07 7H10" /></svg>
                   <span className="mt-2 text-base">{uploadedFile ? uploadedFile.name : 'Select CSV, JSON, or PDF file'}</span>
                   <input type="file" className="hidden" accept=".csv,.json,.pdf" onChange={handleFileSelect} />
                 </label>
@@ -254,11 +254,19 @@ export default function PatientsManager({ user }) {
             { label: 'Showing', value: patients.length, bg: 'var(--kpi-purple-bg)', color: 'var(--kpi-purple-text)' },
             { label: 'Page', value: `${page} / ${totalPages}`, bg: 'var(--kpi-teal-bg)', color: 'var(--kpi-teal-text)' },
             { label: 'Per Page', value: PAGE_SIZE, bg: 'var(--kpi-orange-bg)', color: 'var(--kpi-orange-text)' },
-          ].map((s) => (
-            <div key={s.label} className="rounded-xl p-3 text-center" style={{ background: s.bg }}>
+          ].map((s, i) => (
+            <motion.div
+              key={s.label}
+              className="rounded-xl p-3 text-center"
+              style={{ background: s.bg }}
+              initial={{ opacity: 0, scale: 0.85, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              transition={{ delay: i * 0.08, type: 'spring', stiffness: 400, damping: 25 }}
+              whileHover={{ scale: 1.04, y: -2 }}
+            >
               <p className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: s.color }}>{s.label}</p>
               <p className="text-xl font-extrabold tabular-nums mt-0.5" style={{ color: s.color }}>{s.value}</p>
-            </div>
+            </motion.div>
           ))}
         </div>
 
@@ -312,12 +320,12 @@ export default function PatientsManager({ user }) {
                 <div className="flex items-center gap-1">
                   {pageNumbers.map((p, i) =>
                     p === '...' ? <span key={`dots-${i}`} className="px-2 py-1" style={{ color: 'var(--text-tertiary)' }}>...</span> : (
-                      <button key={p} onClick={() => setPage(p)} className="btn text-sm" style={{
+                      <motion.button key={p} onClick={() => setPage(p)} className="btn text-sm" style={{
                         background: p === page ? 'var(--brand-primary)' : 'var(--bg-card)',
                         color: p === page ? '#fff' : 'var(--text-primary)',
                         border: `1px solid ${p === page ? 'var(--brand-primary)' : 'var(--border-primary)'}`,
                         padding: '0.35rem 0.75rem',
-                      }}>{p}</button>
+                      }} whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>{p}</motion.button>
                     )
                   )}
                 </div>

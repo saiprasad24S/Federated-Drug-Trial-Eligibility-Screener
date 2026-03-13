@@ -3,8 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { apiService } from '../services/apiService';
 import { Card, Button, StatusBadge, TableSkeleton, CardSkeleton } from './ui';
 import { useThemeStore } from '../stores/themeStore';
-import { staggerContainer, staggerItem, fadeIn, slideUp } from '../utils/motionVariants';
-import { PatientEnrollmentModal } from './PatientEnrollmentModal';
+import { staggerContainer, staggerItem, fadeIn, slideUp, popIn, modalBackdrop, modalContent, scaleIn } from '../utils/motionVariants';
+import { ManualCheckModal } from './PatientEnrollmentModal';
 
 /* helper: snake_case → Title Case */
 const humanLabel = (key) => {
@@ -31,21 +31,20 @@ export default function TrialsViewer({ user }) {
   const [eligLoading, setEligLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('eligible');
   const [eligPage, setEligPage] = useState(1);
-  const [eligScope, setEligScope] = useState('global');
+  const [eligScope, setEligScope] = useState('hospital');
   const [hospitalSearch, setHospitalSearch] = useState('');
   const [debouncedHospitalSearch, setDebouncedHospitalSearch] = useState('');
 
   const [searchTerm, setSearchTerm] = useState('');
   const [showBreakdown, setShowBreakdown] = useState(null); // 'eligible' | 'not_eligible' | null
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [newTrial, setNewTrial] = useState({ drugName: '', indication: '', phase: 'Phase III', status: 'Active', successRate: '' });
+  const [newTrial, setNewTrial] = useState({
+    drugName: '', indication: '', phase: 'Phase III', status: 'Active', successRate: '',
+    ageMin: '', ageMax: '', genders: '', bloodGroups: '', bmiMin: '', bmiMax: '', stages: '',
+  });
   const [createError, setCreateError] = useState('');
   const [creating, setCreating] = useState(false);
-  const [enrollIdsText, setEnrollIdsText] = useState('');
-  const [enrollLoading, setEnrollLoading] = useState(false);
-  const [enrollMessage, setEnrollMessage] = useState('');
-  const [enrollError, setEnrollError] = useState('');
-  const [showEnrollmentModal, setShowEnrollmentModal] = useState(false);
+  const [showManualCheckModal, setShowManualCheckModal] = useState(false);
   const hospitalName = user?.hospital_name || '';
   const isDark = useThemeStore((s) => s.theme === 'dark');
 
@@ -83,21 +82,18 @@ export default function TrialsViewer({ user }) {
     setEligData(null);
     setActiveTab('eligible');
     setEligPage(1);
-    setEligScope('global');
+    setEligScope('hospital');
     setHospitalSearch('');
     setDebouncedHospitalSearch('');
     setShowBreakdown(null);
-    setEnrollIdsText('');
-    setEnrollMessage('');
-    setEnrollError('');
-    loadEligibility(trial.drugName, 'eligible', 1, 'global', '');
+    loadEligibility(trial.drugName, 'eligible', 1, 'hospital', '');
   };
   useEffect(() => {
     if (!selectedTrial) return;
     const scopedSearch = eligScope === 'hospital' ? debouncedHospitalSearch : '';
     loadEligibility(selectedTrial.drugName, activeTab, eligPage, eligScope, scopedSearch);
   }, [activeTab, eligPage, eligScope, debouncedHospitalSearch]);
-  const handleTabChange = (tab) => { setActiveTab(tab); setEligScope('global'); setEligPage(1); setHospitalSearch(''); setDebouncedHospitalSearch(''); };
+  const handleTabChange = (tab) => { setActiveTab(tab); setEligPage(1); setHospitalSearch(''); setDebouncedHospitalSearch(''); };
   const handleHospitalCardClick = (tab) => {
     setActiveTab(tab);
     setEligScope('hospital');
@@ -113,95 +109,15 @@ export default function TrialsViewer({ user }) {
 
   const handleBack = () => { setSelectedTrial(null); setEligData(null); };
 
-  const handleEnrollPatients = async () => {
-    if (!selectedTrial) return;
-    setEnrollError('');
-    setEnrollMessage('');
-    const patientIds = enrollIdsText
-      .split(/[\n,\s]+/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-
-    if (!patientIds.length) {
-      setEnrollError('Enter at least one patient ID');
-      return;
-    }
-
-    try {
-      setEnrollLoading(true);
-      const result = await apiService.addPatientsToTrial(selectedTrial.drugName, patientIds);
-      setEnrollMessage(`Added ${result.added_count || 0} patient(s). Total enrolled: ${result.enrolled_count || 0}`);
-      setEnrollIdsText('');
-      await loadTrials();
-      await loadEligibility(selectedTrial.drugName, activeTab, 1, eligScope, debouncedHospitalSearch);
-      setEligPage(1);
-    } catch (error) {
-      const msg = error?.response?.data?.detail || error.message || 'Failed to add patients to trial';
-      setEnrollError(msg);
-    } finally {
-      setEnrollLoading(false);
-    }
-  };
-
-  const handleRemovePatients = async () => {
-    if (!selectedTrial) return;
-    setEnrollError('');
-    setEnrollMessage('');
-    const patientIds = enrollIdsText
-      .split(/[\n,\s]+/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-
-    if (!patientIds.length) {
-      setEnrollError('Enter at least one patient ID');
-      return;
-    }
-
-    try {
-      setEnrollLoading(true);
-      const result = await apiService.removePatientsFromTrial(selectedTrial.drugName, patientIds);
-      setEnrollMessage(`Removed patient(s). Total enrolled: ${result.enrolled_count || 0}`);
-      setEnrollIdsText('');
-      await loadTrials();
-      await loadEligibility(selectedTrial.drugName, activeTab, 1, eligScope, debouncedHospitalSearch);
-      setEligPage(1);
-    } catch (error) {
-      const msg = error?.response?.data?.detail || error.message || 'Failed to remove patients from trial';
-      setEnrollError(msg);
-    } finally {
-      setEnrollLoading(false);
-    }
-  };
-
   const handleDeleteTrial = async () => {
     if (!selectedTrial) return;
     if (!window.confirm(`Are you sure you want to delete trial "${selectedTrial.drugName}"? This action cannot be undone.`)) return;
     try {
-      await apiService.deleteTrial(selectedTrial.drugName);
+      await apiService.deleteTrial(selectedTrial.drugName, hospitalName);
       setSelectedTrial(null);
       await loadTrials();
     } catch (error) {
-      const msg = error?.response?.data?.detail || error.message || 'Failed to delete trial';
-      setEnrollError(msg);
-    }
-  };
-
-  const handleAutoEnroll = async () => {
-    if (!selectedTrial) return;
-    setEnrollError('');
-    setEnrollMessage('');
-    try {
-      setEnrollLoading(true);
-      const result = await apiService.autoEnrollPatients(selectedTrial.drugName);
-      setEnrollMessage(result.message || `Auto-enrolled ${result.enrolled_count || 0} patients`);
-      await loadTrials();
-      await loadEligibility(selectedTrial.drugName, activeTab, 1, eligScope, debouncedHospitalSearch);
-      setEligPage(1);
-    } catch (error) {
-      const msg = error?.response?.data?.detail || error.message || 'Auto-enrollment failed';
-      setEnrollError(msg);
-    } finally {
-      setEnrollLoading(false);
+      console.error('Failed to delete trial:', error);
     }
   };
 
@@ -214,16 +130,23 @@ export default function TrialsViewer({ user }) {
     }
     try {
       setCreating(true);
+      const eligibilityCriteria = {};
+      if (newTrial.ageMin || newTrial.ageMax) eligibilityCriteria.ageRange = [parseInt(newTrial.ageMin) || 0, parseInt(newTrial.ageMax) || 100];
+      if (newTrial.genders.trim()) eligibilityCriteria.genders = newTrial.genders.split(',').map(s => s.trim()).filter(Boolean);
+      if (newTrial.bloodGroups.trim()) eligibilityCriteria.bloodGroups = newTrial.bloodGroups.split(',').map(s => s.trim()).filter(Boolean);
+      if (newTrial.bmiMin || newTrial.bmiMax) eligibilityCriteria.bmiRange = [parseFloat(newTrial.bmiMin) || 10, parseFloat(newTrial.bmiMax) || 50];
+      if (newTrial.stages.trim()) eligibilityCriteria.stages = newTrial.stages.split(',').map(s => s.trim()).filter(Boolean);
       const payload = {
         drugName: newTrial.drugName.trim(),
         indication: newTrial.indication.trim(),
         phase: newTrial.phase,
         status: newTrial.status,
         successRate: parseFloat(newTrial.successRate) || 0,
+        ...(Object.keys(eligibilityCriteria).length > 0 && { eligibilityCriteria }),
       };
       await apiService.createTrial(payload, hospitalName);
       setShowCreateModal(false);
-      setNewTrial({ drugName: '', indication: '', phase: 'Phase III', status: 'Active', successRate: '' });
+      setNewTrial({ drugName: '', indication: '', phase: 'Phase III', status: 'Active', successRate: '', ageMin: '', ageMax: '', genders: '', bloodGroups: '', bmiMin: '', bmiMax: '', stages: '' });
       await loadTrials();
     } catch (error) {
       const msg = error?.response?.data?.detail || error.message || 'Failed to create trial';
@@ -264,10 +187,16 @@ export default function TrialsViewer({ user }) {
 
     return (
       <motion.div className="space-y-6" variants={fadeIn} initial="hidden" animate="visible">
-        <button onClick={handleBack} className="inline-flex items-center gap-2 font-medium transition hover:opacity-80" style={{ color: 'var(--brand-primary)' }}>
+        <motion.button
+          onClick={handleBack}
+          className="inline-flex items-center gap-2 font-medium transition"
+          style={{ color: 'var(--brand-primary)' }}
+          whileHover={{ x: -4, scale: 1.02 }}
+          whileTap={{ scale: 0.96 }}
+        >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
           Back to All Trials
-        </button>
+        </motion.button>
 
         <Card className="border-t-4" style={{ borderTopColor: 'var(--brand-primary)' }}>
           <div className="mb-4">
@@ -276,15 +205,17 @@ export default function TrialsViewer({ user }) {
                 <div className="w-1.5 h-6 rounded-full" style={{ background: 'var(--brand-primary)' }} />
                 <h2 className="text-xl font-bold" style={{ color: 'var(--text-primary)' }}>{selectedTrial.drugName}</h2>
               </div>
-              <button
+              <motion.button
                 onClick={handleDeleteTrial}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
                 style={{ background: 'var(--status-error-bg, #fef2f2)', color: 'var(--status-error, #dc2626)', border: '1px solid var(--status-error-border, #fecaca)' }}
                 title="Delete this trial"
+                whileHover={{ scale: 1.05, boxShadow: '0 0 12px rgba(220,38,38,0.2)' }}
+                whileTap={{ scale: 0.92 }}
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                 Delete Trial
-              </button>
+              </motion.button>
             </div>
             <p className="text-xs mt-1.5 ml-3.5" style={{ color: 'var(--text-tertiary)' }}>Eligibility check across all federated hospitals — your hospital's results highlighted below</p>
           </div>
@@ -292,7 +223,7 @@ export default function TrialsViewer({ user }) {
           {/* Privacy banner */}
           <div className="mb-4 p-3 rounded-lg text-sm flex items-start gap-2" style={{ background: 'var(--status-warning-bg)', border: '1px solid var(--status-warning-border)', color: 'var(--status-warning)' }}>
             <svg className="w-5 h-5 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-            <div><strong>Privacy-Preserving Mode:</strong> Personal details (name, phone, email, address) are <strong>hidden</strong> in trial screening. Only anonymized IDs and medical/demographic data are shown to protect patient privacy across federated hospitals.</div>
+            <div><strong>Auto-Classification:</strong> Patients are automatically classified as eligible/not-eligible based on disease match and body parameters (age, gender, blood group, BMI, stage) defined in the trial criteria.</div>
           </div>
 
           {/* Trial summary KPIs */}
@@ -308,6 +239,16 @@ export default function TrialsViewer({ user }) {
                 <p className="text-sm font-semibold" style={{ color: kpi.color || 'var(--text-primary)' }}>{kpi.value}</p>
               </div>
             ))}
+          </div>
+
+          {/* Manual Check Button */}
+          <div className="mb-4">
+            <Button variant="secondary" onClick={() => setShowManualCheckModal(true)}>
+              <span className="flex items-center gap-1.5">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                Manual Patient Eligibility Check
+              </span>
+            </Button>
           </div>
 
           {/* Summary counts — Hospital-specific + Global */}
@@ -407,80 +348,52 @@ export default function TrialsViewer({ user }) {
           )}
 
           {/* Tab buttons */}
-          <div className="mb-4 p-3 rounded-lg" style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border-primary)' }}>
-            <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-tertiary)' }}>Manual Trial Enrollment (v2)</p>
-            
-            {/* Bulk enrollment with checkbox modal */}
-            <div className="mb-3 flex gap-2">
-              <Button 
-                variant="primary" 
-                onClick={() => setShowEnrollmentModal(true)}
-                className="flex-1"
-              >
-                📋 Bulk Enroll Patients (Checklist)
-              </Button>
-              <Button 
-                variant="secondary" 
-                onClick={handleAutoEnroll}
-                disabled={enrollLoading}
-                className="flex-1"
-              >
-                {enrollLoading ? '⏳ Enrolling...' : '🤖 Auto-Enroll All Matching'}
-              </Button>
-            </div>
-
-            {/* Individual patient IDs input */}
-            <div className="flex flex-col sm:flex-row gap-2">
-              <input
-                type="text"
-                value={enrollIdsText}
-                onChange={(e) => setEnrollIdsText(e.target.value)}
-                placeholder="Or enter patient IDs (comma/space separated), e.g. TEST001, TEST002"
-                className="input flex-1"
-              />
-              <Button variant="primary" onClick={handleEnrollPatients} disabled={enrollLoading}>
-                {enrollLoading ? 'Adding...' : 'Add Patients'}
-              </Button>
-              <Button variant="secondary" onClick={handleRemovePatients} disabled={enrollLoading}>
-                Remove Patients
-              </Button>
-            </div>
-            {enrollMessage && <p className="text-xs mt-2" style={{ color: 'var(--status-success)' }}>{enrollMessage}</p>}
-            {enrollError && <p className="text-xs mt-2" style={{ color: 'var(--status-error)' }}>{enrollError}</p>}
-          </div>
-
           <div className="flex gap-2 mb-4">
-            <button onClick={() => handleTabChange('eligible')} className="flex-1 py-2 px-4 rounded-lg font-semibold text-sm transition" style={{
-              background: activeTab === 'eligible' ? 'var(--status-success)' : 'var(--bg-tertiary)',
-              color: activeTab === 'eligible' ? '#fff' : 'var(--text-secondary)',
-              border: `1px solid ${activeTab === 'eligible' ? 'var(--status-success)' : 'var(--border-primary)'}`,
-            }}>Eligible ({eligibleCount.toLocaleString()})</button>
-            <button onClick={() => handleTabChange('not_eligible')} className="flex-1 py-2 px-4 rounded-lg font-semibold text-sm transition" style={{
-              background: activeTab === 'not_eligible' ? 'var(--status-error)' : 'var(--bg-tertiary)',
-              color: activeTab === 'not_eligible' ? '#fff' : 'var(--text-secondary)',
-              border: `1px solid ${activeTab === 'not_eligible' ? 'var(--status-error)' : 'var(--border-primary)'}`,
-            }}>Not Eligible ({notEligibleCount.toLocaleString()})</button>
+            <motion.button
+              onClick={() => handleTabChange('eligible')}
+              className="flex-1 py-2 px-4 rounded-lg font-semibold text-sm"
+              style={{
+                background: activeTab === 'eligible' ? 'var(--status-success)' : 'var(--bg-tertiary)',
+                color: activeTab === 'eligible' ? '#fff' : 'var(--text-secondary)',
+                border: `1px solid ${activeTab === 'eligible' ? 'var(--status-success)' : 'var(--border-primary)'}`,
+              }}
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
+              animate={activeTab === 'eligible' ? { boxShadow: '0 4px 14px rgba(16,185,129,0.3)' } : { boxShadow: 'none' }}
+              transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+            >Eligible ({eligibleCount.toLocaleString()})</motion.button>
+            <motion.button
+              onClick={() => handleTabChange('not_eligible')}
+              className="flex-1 py-2 px-4 rounded-lg font-semibold text-sm"
+              style={{
+                background: activeTab === 'not_eligible' ? 'var(--status-error)' : 'var(--bg-tertiary)',
+                color: activeTab === 'not_eligible' ? '#fff' : 'var(--text-secondary)',
+                border: `1px solid ${activeTab === 'not_eligible' ? 'var(--status-error)' : 'var(--border-primary)'}`,
+              }}
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
+              animate={activeTab === 'not_eligible' ? { boxShadow: '0 4px 14px rgba(239,68,68,0.3)' } : { boxShadow: 'none' }}
+              transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+            >Not Eligible ({notEligibleCount.toLocaleString()})</motion.button>
           </div>
 
-          {/* Paginated table */}
+          {/* Paginated table — only for hospital scope */}
           {eligLoading ? (
-            <TableSkeleton cols={columns.length || 6} rows={6} />
-          ) : patients.length > 0 ? (
+            <TableSkeleton cols={6} rows={6} />
+          ) : activeScope === 'hospital' && patients.length > 0 ? (
             <>
               <div className="text-xs font-semibold mb-2" style={{ color: 'var(--text-tertiary)' }}>
-                Viewing {isElig ? 'eligible' : 'not eligible'} patients from: <span style={{ color: 'var(--brand-primary)' }}>{scopeTitle}</span>
+                Viewing {isElig ? 'eligible' : 'not eligible'} patients from: <span style={{ color: 'var(--brand-primary)' }}>{hospitalName}</span>
               </div>
-              {activeScope === 'hospital' && (
-                <div className="mb-3">
-                  <input
-                    type="text"
-                    value={hospitalSearch}
-                    onChange={(e) => { setHospitalSearch(e.target.value); setEligPage(1); }}
-                    placeholder="Search patient by name, ID, disease, stage..."
-                    className="input"
-                  />
-                </div>
-              )}
+              <div className="mb-3">
+                <input
+                  type="text"
+                  value={hospitalSearch}
+                  onChange={(e) => { setHospitalSearch(e.target.value); setEligPage(1); }}
+                  placeholder="Search patient by name, ID, disease, stage..."
+                  className="input"
+                />
+              </div>
               <div className="overflow-x-auto rounded-lg" style={{ border: `1px solid ${tabAccentBorder}` }}>
                   <table className="w-full text-sm themed-table">
                     <thead>
@@ -491,7 +404,7 @@ export default function TrialsViewer({ user }) {
                     </thead>
                     <tbody>
                       {patients.map((p, i) => (
-                        <tr key={p.patient_id || i}>
+                        <tr key={p.patient_id || p._oid || i}>
                           <td className="px-3 py-2" style={{ color: 'var(--text-tertiary)' }}>{(currentPage - 1) * PAGE_SIZE + i + 1}</td>
                           {columns.map(col => <td key={col} className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--text-primary)' }}>{col === 'patient_id' ? <span className="font-medium">{p[col]}</span> : renderCell(p[col], col)}</td>)}
                         </tr>
@@ -523,29 +436,26 @@ export default function TrialsViewer({ user }) {
                 Showing {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, scopedTotal)} of {scopedTotal.toLocaleString()} patients
               </div>
             </>
+          ) : activeScope === 'hospital' ? (
+            <div className="text-center py-6" style={{ color: 'var(--text-tertiary)' }}>No {isElig ? 'eligible' : 'ineligible'} patients found for {hospitalName}.</div>
           ) : (
-            <div className="text-center py-6" style={{ color: 'var(--text-tertiary)' }}>No {isElig ? 'eligible' : 'ineligible'} patients found for {scopeTitle}.</div>
+            <div className="text-center py-4 text-sm" style={{ color: 'var(--text-tertiary)' }}>
+              Click on your hospital's eligible/not-eligible cards above to view full patient details.
+            </div>
           )}
         </Card>
 
         {/* Privacy footer */}
         <div className="p-3 rounded-lg text-sm flex items-start gap-2" style={{ background: 'var(--status-info-bg)', border: '1px solid var(--status-info-border)', color: 'var(--status-info)' }}>
           <svg className="w-5 h-5 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-          <span><strong>Federated Privacy:</strong> Patient identities are anonymized (ANON-XXXXX). Only age, gender, blood group, disease, stage, BMI, and comorbidities are shared for eligibility screening. No personal information leaves your hospital.</span>
+          <span><strong>Federated Privacy:</strong> Global view shows only hospital names and eligible counts. Full patient details are visible only for your hospital. No personal information leaves your hospital.</span>
         </div>
 
-        {/* Patient Enrollment Modal (portal renders at document.body) */}
-        <PatientEnrollmentModal
+        {/* Manual Patient Check Modal */}
+        <ManualCheckModal
           trial={selectedTrial}
-          hospital={hospitalName}
-          isOpen={showEnrollmentModal}
-          onClose={() => setShowEnrollmentModal(false)}
-          onEnrollmentComplete={async () => {
-            await loadTrials();
-            await loadEligibility(selectedTrial.drugName, activeTab, eligPage, eligScope, debouncedHospitalSearch);
-            setEnrollMessage('Bulk enrollment completed successfully');
-            setTimeout(() => setEnrollMessage(''), 3000);
-          }}
+          isOpen={showManualCheckModal}
+          onClose={() => setShowManualCheckModal(false)}
         />
       </motion.div>
     );
@@ -649,14 +559,14 @@ export default function TrialsViewer({ user }) {
       <AnimatePresence>
         {showCreateModal && (
           <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            {...modalBackdrop}
             className="fixed inset-0 z-50 flex items-center justify-center p-4"
-            style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}
+            style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(6px)' }}
             onClick={() => setShowCreateModal(false)}
           >
             <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="w-full max-w-md rounded-2xl shadow-2xl p-6"
+              {...modalContent}
+              className="w-full max-w-md rounded-2xl shadow-2xl p-6 max-h-[90vh] overflow-y-auto"
               style={{ background: 'var(--bg-card)', border: '1px solid var(--border-primary)' }}
               onClick={(e) => e.stopPropagation()}
             >
@@ -701,6 +611,45 @@ export default function TrialsViewer({ user }) {
                 <div>
                   <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>Success Rate (%)</label>
                   <input type="number" min="0" max="100" step="0.1" value={newTrial.successRate} onChange={(e) => setNewTrial(p => ({ ...p, successRate: e.target.value }))} placeholder="e.g. 65.0" className="input w-full" />
+                </div>
+
+                {/* Eligibility Criteria */}
+                <div className="pt-2 mt-2" style={{ borderTop: '1px solid var(--border-primary)' }}>
+                  <p className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: 'var(--brand-primary)' }}>Eligibility Criteria (optional — auto-derived if empty)</p>
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--text-tertiary)' }}>Age Min</label>
+                        <input type="number" min="0" max="120" value={newTrial.ageMin} onChange={(e) => setNewTrial(p => ({ ...p, ageMin: e.target.value }))} placeholder="e.g. 18" className="input w-full" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--text-tertiary)' }}>Age Max</label>
+                        <input type="number" min="0" max="120" value={newTrial.ageMax} onChange={(e) => setNewTrial(p => ({ ...p, ageMax: e.target.value }))} placeholder="e.g. 65" className="input w-full" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--text-tertiary)' }}>Genders (comma-separated)</label>
+                      <input type="text" value={newTrial.genders} onChange={(e) => setNewTrial(p => ({ ...p, genders: e.target.value }))} placeholder="e.g. Male, Female" className="input w-full" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--text-tertiary)' }}>Blood Groups (comma-separated)</label>
+                      <input type="text" value={newTrial.bloodGroups} onChange={(e) => setNewTrial(p => ({ ...p, bloodGroups: e.target.value }))} placeholder="e.g. A+, B+, O+" className="input w-full" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--text-tertiary)' }}>BMI Min</label>
+                        <input type="number" step="0.1" value={newTrial.bmiMin} onChange={(e) => setNewTrial(p => ({ ...p, bmiMin: e.target.value }))} placeholder="e.g. 18.5" className="input w-full" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--text-tertiary)' }}>BMI Max</label>
+                        <input type="number" step="0.1" value={newTrial.bmiMax} onChange={(e) => setNewTrial(p => ({ ...p, bmiMax: e.target.value }))} placeholder="e.g. 35.0" className="input w-full" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--text-tertiary)' }}>Stages (comma-separated)</label>
+                      <input type="text" value={newTrial.stages} onChange={(e) => setNewTrial(p => ({ ...p, stages: e.target.value }))} placeholder="e.g. Stage I, Stage II" className="input w-full" />
+                    </div>
+                  </div>
                 </div>
 
                 {createError && (

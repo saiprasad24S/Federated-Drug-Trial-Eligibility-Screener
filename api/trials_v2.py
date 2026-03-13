@@ -18,6 +18,15 @@ import database_v2 as db_v2
 from database_v2 import _disease_matches_python
 from models.trial_model_v2 import CreateTrialRequestV2, AddPatientsRequestV2
 
+
+def _get_audit_logger():
+    """Lazily fetch the blockchain audit helper from main to avoid circular imports."""
+    try:
+        from api.main import _log_audit, blockchain_logger
+        return _log_audit
+    except Exception:
+        return None
+
 router = APIRouter(tags=["Trials V2"])
 
 _FEDERATED_COLUMNS = [
@@ -137,8 +146,7 @@ def _matches_search(patient: dict, search_term: str) -> bool:
 async def get_trials_v2():
     """List v2 trials with disease-specific eligibility estimates.
 
-    Important difference from v1:
-    each trial uses only disease-matching patients for sampling/estimation.
+    Uses MongoDB aggregation for fast counts instead of loading all patients.
     """
     try:
         trial_defs = await db_v2.get_trials_from_db()
@@ -149,9 +157,14 @@ async def get_trials_v2():
                 continue
 
             enrolled_ids = trial.get("enrolled_patient_ids") or []
-            enrolled_patients = await db_v2.get_patients_by_ids(enrolled_ids)
-            criteria = trial.get("eligibilityCriteria") or _build_criteria_from_patients(enrolled_patients)
-            eligible_count = sum(1 for patient in enrolled_patients if _compute_eligibility(patient, criteria))
+            criteria = trial.get("eligibilityCriteria") or {}
+
+            # Use aggregation for fast counts — disease-based
+            if disease and criteria:
+                summary = await db_v2.get_global_eligibility_summary(disease, criteria)
+                eligible_count = summary["eligible_count"]
+            else:
+                eligible_count = 0
 
             trials.append(
                 {
@@ -214,7 +227,18 @@ async def create_trial_v2(
         enrollment_result = None
         if auto_enroll:
             enrollment_result = await db_v2.auto_enroll_patients_by_disease(req.drugName, disease)
-        
+
+        # Audit log: trial created
+        _audit = _get_audit_logger()
+        if _audit:
+            _audit(
+                action="TRIAL_CREATED",
+                details=f"Trial '{req.drugName}' created for {disease} (phase: {req.phase})",
+                actor=hospital or req.createdByHospital or "Unknown Hospital",
+                metadata={"drugName": req.drugName, "disease": disease, "phase": req.phase},
+                cooldown=0,
+            )
+
         return {
             "message": f"Trial '{req.drugName}' created successfully in v2",
             "trial": created,
@@ -237,15 +261,11 @@ async def get_eligible_patients_for_drug_v2(
     tab: str = "eligible",
     scope: str = "global",
     search: str = "",
-    store_mapping: bool = Query(default=False),
 ):
-    """Return eligibility results for enrolled trial patients only.
+    """Return eligibility results for enrolled trial patients.
 
-    Flow:
-      1. Load trial by `drug_name`
-      2. Read `trial.enrolled_patient_ids`
-      3. Query only those patients
-      4. Evaluate eligibility on enrolled set
+    - scope=global  → hospital breakdown only (no patient rows)
+    - scope=hospital → full patient details with pagination
     """
     try:
         page_size = min(max(page_size, 10), 200)
@@ -255,120 +275,118 @@ async def get_eligible_patients_for_drug_v2(
         if not trial:
             raise HTTPException(status_code=404, detail=f"Trial '{drug_name}' not found in v2")
 
-        disease = trial.get("disease") or trial.get("indication") or ""
         enrolled_ids = trial.get("enrolled_patient_ids") or []
-        patients = await db_v2.get_patients_by_ids(enrolled_ids)
+        criteria = trial.get("eligibilityCriteria") or {}
+        disease = trial.get("disease") or trial.get("indication") or ""
 
-        criteria = trial.get("eligibilityCriteria") or _build_criteria_from_patients(patients)
+        # Fast aggregation for global summary — disease-based
+        summary = await db_v2.get_global_eligibility_summary(disease, criteria)
+        breakdown = summary["hospital_breakdown"]
 
-        eligible_indices: List[int] = []
-        not_eligible_indices: List[int] = []
-        mapping_rows = []
-        hospital_eligible_count = 0
-        hospital_not_eligible_count = 0
-        hospital_total = 0
-        hospital_breakdown: Dict[str, Dict[str, int]] = {}
-
-        for idx, patient in enumerate(patients):
-            is_eligible = _compute_eligibility(patient, criteria)
-            if is_eligible:
-                eligible_indices.append(idx)
-            else:
-                not_eligible_indices.append(idx)
-
-            if hospital and patient.get("hospital_name") == hospital:
-                hospital_total += 1
-                if is_eligible:
-                    hospital_eligible_count += 1
-                else:
-                    hospital_not_eligible_count += 1
-
-            h_name = patient.get("hospital_name", "Unknown")
-            if h_name not in hospital_breakdown:
-                hospital_breakdown[h_name] = {"eligible": 0, "not_eligible": 0, "total": 0}
-            hospital_breakdown[h_name]["total"] += 1
-            if is_eligible:
-                hospital_breakdown[h_name]["eligible"] += 1
-            else:
-                hospital_breakdown[h_name]["not_eligible"] += 1
-
-            if store_mapping and trial.get("trial_id"):
-                mapping_rows.append(
-                    {
-                        "patient_id": patient.get("patient_id"),
-                        "eligibility_status": is_eligible,
-                        "evaluated_at": datetime.now(timezone.utc),
-                    }
-                )
-
-        if store_mapping and trial.get("trial_id"):
-            await db_v2.upsert_trial_patient_mappings(trial["trial_id"], mapping_rows)
-
-        eligible_count = len(eligible_indices)
-        not_eligible_count = len(not_eligible_indices)
+        # Audit log: trial eligibility viewed
+        _audit = _get_audit_logger()
+        if _audit:
+            _audit(
+                action="TRIAL_VIEWED",
+                details=f"Viewed eligibility for trial '{drug_name}' ({summary['eligible_count']} eligible, {summary['not_eligible_count']} not eligible)",
+                actor=hospital or "Unknown Hospital",
+                record_count=summary["eligible_count"] + summary["not_eligible_count"],
+                metadata={"drugName": drug_name, "scope": scope, "tab": tab},
+                cooldown=15,
+            )
 
         requested_scope = (scope or "global").strip().lower()
-        hospital_scope = requested_scope == "hospital" and bool(hospital)
-        search_term = (search or "").strip().lower()
 
-        if tab == "eligible":
-            scoped_ids = eligible_indices
-            total_for_tab = eligible_count
-            if hospital_scope:
-                scoped_ids = [i for i in eligible_indices if patients[i].get("hospital_name") == hospital]
-                total_for_tab = hospital_eligible_count
+        if requested_scope == "hospital" and hospital:
+            # Hospital scope: paginated full patient details
+            hospital_data = await db_v2.get_hospital_patients_paginated(
+                disease, criteria, hospital, tab, page, page_size, search,
+            )
+            hospital_cols = [
+                "patient_id", "patient_name", "age", "gender", "blood_group",
+                "disease", "stage", "comorbidities", "bmi", "diagnosis_date",
+                "phone", "email",
+            ]
+            return {
+                "drug": drug_name,
+                "hospital": hospital,
+                "tab": tab,
+                "scope": "hospital",
+                "patients": hospital_data["patients"],
+                "columns": hospital_cols,
+                "eligible_count": summary["eligible_count"],
+                "not_eligible_count": summary["not_eligible_count"],
+                "hospital_eligible_count": hospital_data["eligible_count"],
+                "hospital_not_eligible_count": hospital_data["not_eligible_count"],
+                "hospital_total": hospital_data["eligible_count"] + hospital_data["not_eligible_count"],
+                "hospital_breakdown": breakdown,
+                "scope_total": hospital_data["total"],
+                "page": hospital_data["page"],
+                "page_size": page_size,
+                "total_pages": hospital_data["total_pages"],
+                "search": search,
+                "trial_params": criteria,
+                "enrolled_count": len(enrolled_ids),
+            }
         else:
-            scoped_ids = not_eligible_indices
-            total_for_tab = not_eligible_count
-            if hospital_scope:
-                scoped_ids = [i for i in not_eligible_indices if patients[i].get("hospital_name") == hospital]
-                total_for_tab = hospital_not_eligible_count
+            # Global scope: summary only, no patient rows
+            h_info = breakdown.get(hospital, {}) if hospital else {}
+            return {
+                "drug": drug_name,
+                "hospital": hospital,
+                "tab": tab,
+                "scope": "global",
+                "patients": [],
+                "columns": [],
+                "eligible_count": summary["eligible_count"],
+                "not_eligible_count": summary["not_eligible_count"],
+                "hospital_eligible_count": h_info.get("eligible", 0),
+                "hospital_not_eligible_count": h_info.get("not_eligible", 0),
+                "hospital_total": h_info.get("total", 0),
+                "hospital_breakdown": breakdown,
+                "scope_total": summary["eligible_count"] if tab == "eligible" else summary["not_eligible_count"],
+                "page": 1,
+                "page_size": page_size,
+                "total_pages": 1,
+                "search": "",
+                "trial_params": criteria,
+                "enrolled_count": len(enrolled_ids),
+            }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
 
-        if hospital_scope and search_term:
-            scoped_ids = [i for i in scoped_ids if _matches_search(patients[i], search_term)]
-            total_for_tab = len(scoped_ids)
 
-        start = (page - 1) * page_size
-        end = start + page_size
-        page_ids = scoped_ids[start:end]
-        page_patients_raw = [patients[i] for i in page_ids]
-        total_pages = max(1, -(-max(total_for_tab, 1) // page_size))
+@router.post("/v2/trials/{drug_name}/check-patient")
+async def check_patient_eligibility_v2(drug_name: str, body: dict):
+    """Check a single patient's eligibility against this trial's criteria."""
+    try:
+        patient_id = str(body.get("patient_id") or "").strip()
+        if not patient_id:
+            raise HTTPException(status_code=422, detail="patient_id is required")
 
-        if hospital_scope:
-            cols = [c for c in _FEDERATED_COLUMNS if any(c in p for p in page_patients_raw[:5])]
-            page_patients = [{k: p.get(k) for k in cols} for p in page_patients_raw]
-        else:
-            cols = [c for c in _FEDERATED_COLUMNS if any(c in p for p in page_patients_raw[:5])]
-            page_patients = []
-            for idx, patient in enumerate(page_patients_raw):
-                row = {k: patient.get(k) for k in cols if k != "patient_id"}
-                row["patient_id"] = f"ANON-{start + idx + 1:05d}"
-                page_patients.append(row)
+        trial = await db_v2.get_trial_by_drug_name(drug_name)
+        if not trial:
+            raise HTTPException(status_code=404, detail=f"Trial '{drug_name}' not found")
 
-        return {
-            "drug": drug_name,
-            "hospital": hospital,
-            "tab": tab,
-            "scope": "hospital" if hospital_scope else "global",
-            "scope_total": total_for_tab,
-            "search": search_term if hospital_scope else "",
-            "patients": page_patients,
-            "columns": cols,
-            "eligible_count": eligible_count,
-            "not_eligible_count": not_eligible_count,
-            "hospital_eligible_count": hospital_eligible_count,
-            "hospital_not_eligible_count": hospital_not_eligible_count,
-            "hospital_total": hospital_total,
-            "hospital_breakdown": hospital_breakdown,
-            "page": page,
-            "page_size": page_size,
-            "total_pages": total_pages,
-            "trial_params": criteria,
-            "privacy_mode": True,
-            "privacy_notice": "Patient identities are anonymized. Only enrolled trial patients are screened in v2.",
-            "enrollment_mode": "manual",
-            "enrolled_count": len(enrolled_ids),
-        }
+        criteria = trial.get("eligibilityCriteria") or {}
+        result = await db_v2.check_patient_eligibility(patient_id, criteria)
+        if not result:
+            raise HTTPException(status_code=404, detail=f"Patient '{patient_id}' not found")
+
+        # Audit log: manual patient check
+        _audit = _get_audit_logger()
+        if _audit:
+            _audit(
+                action="PATIENT_CHECK",
+                details=f"Manual eligibility check: patient '{patient_id}' for trial '{drug_name}' — {'ELIGIBLE' if result.get('is_eligible') else 'NOT ELIGIBLE'}",
+                actor="Hospital User",
+                metadata={"drugName": drug_name, "patient_id": patient_id, "is_eligible": result.get("is_eligible")},
+                cooldown=2,
+            )
+
+        return {"patient": result, "trial": drug_name, "criteria": criteria}
     except HTTPException:
         raise
     except Exception as exc:
@@ -376,13 +394,25 @@ async def get_eligible_patients_for_drug_v2(
 
 
 @router.delete("/v2/trials/{drug_name}")
-async def delete_trial_v2(drug_name: str):
+async def delete_trial_v2(drug_name: str, hospital: Optional[str] = Query(default=None)):
     """Delete a trial by drug name."""
     try:
         db = db_v2.get_async_db()
         result = await db.trials.delete_one({"drugName": drug_name})
         if result.deleted_count == 0:
             raise HTTPException(status_code=404, detail=f"Trial '{drug_name}' not found")
+
+        # Audit log: trial deleted
+        _audit = _get_audit_logger()
+        if _audit:
+            _audit(
+                action="TRIAL_DELETED",
+                details=f"Trial '{drug_name}' was deleted",
+                actor=hospital or "Unknown Hospital",
+                metadata={"drugName": drug_name},
+                cooldown=0,
+            )
+
         return {"message": f"Trial '{drug_name}' deleted successfully", "deleted": True}
     except HTTPException:
         raise

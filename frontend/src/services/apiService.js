@@ -206,14 +206,28 @@ export const apiService = {
     }
   },
 
-  deleteTrial: async (drugName) => {
+  deleteTrial: async (drugName, hospital) => {
     try {
+      const params = hospital ? `?hospital=${encodeURIComponent(hospital)}` : '';
       const response = await axios.delete(
-        `${API_BASE_URL}/v2/trials/${encodeURIComponent(drugName)}`
+        `${API_BASE_URL}/v2/trials/${encodeURIComponent(drugName)}${params}`
       );
       return response.data;
     } catch (error) {
       console.error('Error deleting trial:', error);
+      throw error;
+    }
+  },
+
+  checkPatientEligibility: async (drugName, patientId) => {
+    try {
+      const response = await axios.post(
+        `${API_BASE_URL}/v2/trials/${encodeURIComponent(drugName)}/check-patient`,
+        { patient_id: patientId }
+      );
+      return response.data;
+    } catch (error) {
+      console.error('Error checking patient eligibility:', error);
       throw error;
     }
   },

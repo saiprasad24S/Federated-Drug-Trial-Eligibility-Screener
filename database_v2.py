@@ -407,6 +407,238 @@ async def auto_enroll_patients_by_disease(drug_name: str, disease: str) -> dict:
     }
 
 
+# ---------------------------------------------------------------------------
+# MongoDB-aggregation-based eligibility (performance optimized)
+# ---------------------------------------------------------------------------
+def _build_mongo_eligibility_filter(criteria: dict) -> dict:
+    """Build a MongoDB query filter from eligibility criteria dict."""
+    mongo_filter: dict = {}
+    if criteria.get("ageRange"):
+        lo, hi = criteria["ageRange"]
+        mongo_filter["age"] = {"$gte": lo, "$lte": hi}
+    if criteria.get("genders"):
+        mongo_filter["gender"] = {"$in": criteria["genders"]}
+    if criteria.get("bloodGroups"):
+        mongo_filter["blood_group"] = {"$in": criteria["bloodGroups"]}
+    if criteria.get("bmiRange"):
+        lo, hi = criteria["bmiRange"]
+        mongo_filter["bmi"] = {"$gte": lo, "$lte": hi}
+    if criteria.get("stages"):
+        mongo_filter["stage"] = {"$in": criteria["stages"]}
+    return mongo_filter
+
+
+async def get_global_eligibility_summary(
+    disease: str, criteria: dict
+) -> Dict[str, Any]:
+    """Get eligible/not-eligible counts per hospital using MongoDB aggregation.
+
+    Finds all patients whose disease matches (case-insensitive regex),
+    then classifies by eligibility criteria.
+    Returns { hospital_breakdown, eligible_count, not_eligible_count }.
+    """
+    db = get_async_db()
+    if not disease:
+        return {"hospital_breakdown": {}, "eligible_count": 0, "not_eligible_count": 0}
+
+    import re as _re
+    disease_regex = {"$regex": _re.escape(disease), "$options": "i"}
+    disease_match = {"disease": disease_regex}
+
+    elig_filter = _build_mongo_eligibility_filter(criteria)
+
+    # Total counts per hospital (all patients with matching disease)
+    total_pipeline = [
+        {"$match": disease_match},
+        {"$group": {"_id": "$hospital_name", "total": {"$sum": 1}}},
+    ]
+    total_counts: Dict[str, int] = {}
+    async for doc in db.patients.aggregate(total_pipeline):
+        total_counts[doc["_id"] or "Unknown"] = doc["total"]
+
+    # Eligible counts per hospital (disease match + criteria match)
+    eligible_match = {**disease_match, **elig_filter}
+    eligible_pipeline = [
+        {"$match": eligible_match},
+        {"$group": {"_id": "$hospital_name", "eligible": {"$sum": 1}}},
+    ]
+    eligible_counts: Dict[str, int] = {}
+    async for doc in db.patients.aggregate(eligible_pipeline):
+        eligible_counts[doc["_id"] or "Unknown"] = doc["eligible"]
+
+    breakdown: Dict[str, Dict[str, int]] = {}
+    total_eligible = 0
+    total_not = 0
+    for hospital, total in total_counts.items():
+        eligible = eligible_counts.get(hospital, 0)
+        not_eligible = total - eligible
+        breakdown[hospital] = {
+            "eligible": eligible,
+            "not_eligible": not_eligible,
+            "total": total,
+        }
+        total_eligible += eligible
+        total_not += not_eligible
+
+    return {
+        "hospital_breakdown": breakdown,
+        "eligible_count": total_eligible,
+        "not_eligible_count": total_not,
+    }
+
+
+async def get_hospital_patients_paginated(
+    disease: str,
+    criteria: dict,
+    hospital: str,
+    tab: str = "eligible",
+    page: int = 1,
+    page_size: int = 50,
+    search: str = "",
+) -> Dict[str, Any]:
+    """Get paginated patient details for a specific hospital with eligibility.
+
+    Finds patients in the hospital whose disease matches (case-insensitive regex),
+    then classifies by eligibility criteria.
+    Returns full patient details (including personal info) for the hospital view.
+    """
+    db = get_async_db()
+    if not disease:
+        return {"patients": [], "total": 0, "page": page, "total_pages": 1,
+                "eligible_count": 0, "not_eligible_count": 0}
+
+    import re as _re
+    disease_regex = {"$regex": _re.escape(disease), "$options": "i"}
+
+    elig_filter = _build_mongo_eligibility_filter(criteria)
+
+    # Base: disease match + this hospital
+    base = {"disease": disease_regex, "hospital_name": hospital}
+
+    # Count eligible in this hospital
+    elig_match = {**base, **elig_filter}
+    hospital_eligible = await db.patients.count_documents(elig_match)
+
+    total_in_hospital = await db.patients.count_documents(base)
+    hospital_not_eligible = total_in_hospital - hospital_eligible
+
+    # Build query for the requested tab
+    if tab == "eligible":
+        query = {**base, **elig_filter}
+        tab_total = hospital_eligible
+    else:
+        # Not eligible = disease match in hospital but NOT matching criteria
+        eligible_ids_cursor = db.patients.find(elig_match, {"_id": 1})
+        eligible_oids = [doc["_id"] async for doc in eligible_ids_cursor]
+        query = {**base}
+        if eligible_oids:
+            query["_id"] = {"$nin": eligible_oids}
+        tab_total = hospital_not_eligible
+
+    # Apply text search filter
+    if search:
+        search_regex = {"$regex": search.strip(), "$options": "i"}
+        query["$or"] = [
+            {"patient_id": search_regex},
+            {"patient_name": search_regex},
+            {"disease": search_regex},
+            {"blood_group": search_regex},
+            {"stage": search_regex},
+        ]
+
+    # Full patient projection (including personal details for hospital view)
+    full_projection = {
+        "_id": 1,
+        "patient_id": 1,
+        "patient_name": 1,
+        "age": 1,
+        "gender": 1,
+        "blood_group": 1,
+        "disease": 1,
+        "stage": 1,
+        "comorbidities": 1,
+        "bmi": 1,
+        "diagnosis_date": 1,
+        "hospital_name": 1,
+        "phone": 1,
+        "email": 1,
+        "admission_date": 1,
+    }
+
+    if search:
+        # Re-count after search
+        tab_total = await db.patients.count_documents(query)
+
+    total_pages = max(1, -(-tab_total // page_size))
+    skip = (page - 1) * page_size
+
+    cursor = db.patients.find(query, full_projection).sort("patient_id", 1).skip(skip).limit(page_size)
+    docs = await cursor.to_list(length=page_size)
+    patients = [_add_oid(d) for d in docs]
+
+    return {
+        "patients": patients,
+        "total": tab_total,
+        "page": page,
+        "total_pages": total_pages,
+        "eligible_count": hospital_eligible,
+        "not_eligible_count": hospital_not_eligible,
+    }
+
+
+async def check_patient_eligibility(patient_id_or_oid: str, criteria: dict) -> Optional[Dict[str, Any]]:
+    """Check a single patient's eligibility against trial criteria.
+
+    Accepts either a patient_id string or an ObjectId hex string.
+    Returns patient dict with 'is_eligible' field, or None if not found.
+    """
+    db = get_async_db()
+
+    # Try ObjectId first, then patient_id (string or int)
+    patient = None
+    if ObjectId.is_valid(patient_id_or_oid):
+        patient = await db.patients.find_one({"_id": ObjectId(patient_id_or_oid)})
+    if not patient:
+        patient = await db.patients.find_one({"patient_id": patient_id_or_oid})
+    if not patient:
+        # Try as integer (patient_id may be stored as int in DB)
+        try:
+            patient = await db.patients.find_one({"patient_id": int(patient_id_or_oid)})
+        except (ValueError, TypeError):
+            pass
+    if not patient:
+        return None
+
+    doc = dict(patient)
+    doc["_oid"] = str(doc.pop("_id"))
+
+    # Evaluate eligibility
+    elig_filter = _build_mongo_eligibility_filter(criteria)
+    is_eligible = True
+    age = doc.get("age")
+    if age is not None and criteria.get("ageRange"):
+        lo, hi = criteria["ageRange"]
+        if not (lo <= age <= hi):
+            is_eligible = False
+    gender = doc.get("gender", "")
+    if criteria.get("genders") and gender and gender not in criteria["genders"]:
+        is_eligible = False
+    bg = doc.get("blood_group", "")
+    if criteria.get("bloodGroups") and bg and bg not in criteria["bloodGroups"]:
+        is_eligible = False
+    bmi = doc.get("bmi")
+    if bmi is not None and criteria.get("bmiRange"):
+        lo, hi = criteria["bmiRange"]
+        if not (lo <= bmi <= hi):
+            is_eligible = False
+    stage = doc.get("stage", "")
+    if criteria.get("stages") and stage and stage not in criteria["stages"]:
+        is_eligible = False
+
+    doc["is_eligible"] = is_eligible
+    return doc
+
+
 async def get_available_patients_for_trial(
     drug_name: str,
     hospital: Optional[str] = None,

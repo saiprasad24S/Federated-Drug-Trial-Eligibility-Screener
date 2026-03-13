@@ -167,14 +167,24 @@ function App() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex gap-1.5 overflow-x-auto py-2.5">
               {TABS.map((tab) => (
-                <button
+                <motion.button
                   key={tab.id}
                   onClick={() => navigateTab(tab.id)}
-                  className={`flex items-center gap-2 py-2 px-4 font-medium text-sm whitespace-nowrap transition-all duration-200 ${activeTab === tab.id ? 'tab-active' : 'tab-inactive'}`}
+                  className={`relative flex items-center gap-2 py-2 px-4 font-medium text-sm whitespace-nowrap transition-all duration-200 ${activeTab === tab.id ? 'tab-active' : 'tab-inactive'}`}
+                  whileHover={{ scale: 1.04 }}
+                  whileTap={{ scale: 0.97 }}
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={tab.icon} /></svg>
                   {tab.label}
-                </button>
+                  {activeTab === tab.id && (
+                    <motion.div
+                      layoutId="activeTabIndicator"
+                      className="absolute bottom-0 left-2 right-2 h-0.5 rounded-full"
+                      style={{ background: 'var(--brand-primary)' }}
+                      transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                    />
+                  )}
+                </motion.button>
               ))}
             </div>
           </div>

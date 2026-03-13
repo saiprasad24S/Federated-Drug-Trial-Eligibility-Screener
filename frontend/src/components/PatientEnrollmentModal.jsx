@@ -1,291 +1,134 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { apiService } from '../services/apiService';
 import Button from './ui/Button';
 
-export function PatientEnrollmentModal({ trial, hospital, isOpen, onClose, onEnrollmentComplete }) {
-  const [availablePatients, setAvailablePatients] = useState([]);
-  const [selectedPatients, setSelectedPatients] = useState(new Set());
-  const [loading, setLoading] = useState(false);
-  const [enrolling, setEnrolling] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [message, setMessage] = useState(null);
+export function ManualCheckModal({ trial, isOpen, onClose }) {
+  const [patientId, setPatientId] = useState('');
+  const [checking, setChecking] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState('');
 
-  useEffect(() => {
-    if (isOpen && trial) {
-      loadAvailablePatients();
-    }
-  }, [isOpen, trial, hospital]);
-
-  const loadAvailablePatients = async () => {
-    setLoading(true);
+  const handleCheck = async () => {
+    const id = patientId.trim();
+    if (!id) { setError('Enter a patient ID'); return; }
+    setError('');
+    setResult(null);
+    setChecking(true);
     try {
-      const response = await apiService.getAvailablePatientsForTrial(trial.drugName, hospital);
-      setAvailablePatients(response.patients || []);
-    } catch (error) {
-      console.error('Failed to load available patients:', error);
-      setMessage({ type: 'error', text: 'Failed to load available patients' });
+      const data = await apiService.checkPatientEligibility(trial.drugName, id);
+      setResult(data);
+    } catch (err) {
+      setError(err?.response?.data?.detail || err.message || 'Check failed');
     } finally {
-      setLoading(false);
+      setChecking(false);
     }
   };
 
-  const handleSelectAll = () => {
-    if (selectedPatients.size === filteredPatients.length) {
-      setSelectedPatients(new Set());
-    } else {
-      setSelectedPatients(new Set(filteredPatients.map(p => p._oid)));
-    }
-  };
+  const handleClose = () => { setPatientId(''); setResult(null); setError(''); onClose(); };
 
-  const handleTogglePatient = (patientId) => {
-    const newSelected = new Set(selectedPatients);
-    if (newSelected.has(patientId)) {
-      newSelected.delete(patientId);
-    } else {
-      newSelected.add(patientId);
-    }
-    setSelectedPatients(newSelected);
-  };
-
-  const handleEnroll = async () => {
-    if (selectedPatients.size === 0) {
-      setMessage({ type: 'warning', text: 'Please select at least one patient' });
-      return;
-    }
-
-    setEnrolling(true);
-    try {
-      const patientIds = Array.from(selectedPatients);
-      const response = await apiService.addPatientsToTrial(trial.drugName, patientIds);
-      
-      setMessage({ 
-        type: 'success', 
-        text: `Successfully enrolled ${response.added_count || patientIds.length} patient(s)` 
-      });
-      
-      setSelectedPatients(new Set());
-      
-      // Refresh available patients
-      await loadAvailablePatients();
-      
-      // Notify parent component
-      if (onEnrollmentComplete) {
-        onEnrollmentComplete();
-      }
-    } catch (error) {
-      console.error('Failed to enroll patients:', error);
-      setMessage({ type: 'error', text: 'Failed to enroll patients' });
-    } finally {
-      setEnrolling(false);
-    }
-  };
-
-  const filteredPatients = availablePatients.filter(patient => {
-    if (!searchTerm) return true;
-    const search = searchTerm.toLowerCase();
-    return (
-      patient.patient_id?.toLowerCase().includes(search) ||
-      patient.patient_name?.toLowerCase().includes(search) ||
-      patient.disease?.toLowerCase().includes(search) ||
-      patient.stage?.toLowerCase().includes(search) ||
-      patient.hospital_name?.toLowerCase().includes(search)
-    );
-  });
+  const patient = result?.patient;
+  const criteria = result?.criteria || {};
 
   return createPortal(
     <AnimatePresence>
       {isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-          {/* Backdrop */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            onClick={onClose}
-          />
-
-          {/* Modal */}
-          <motion.div
-            initial={{ scale: 0.95, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.95, opacity: 0 }}
-            className="relative z-10 w-full max-w-4xl max-h-[85vh] flex flex-col bg-white dark:bg-gray-800 rounded-2xl shadow-2xl m-4"
-          >
-          {/* Header */}
-          <div className="flex-shrink-0 flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                <svg className="w-6 h-6 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                </svg>
-              </div>
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-                  Enroll Patients
-                </h2>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                  {trial?.drugName} - {trial?.disease}
-                  {hospital && ` (${hospital})`}
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={onClose}
-              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-            >
-              <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-
-          {/* Sticky toolbar: Search + Select All + Enroll button */}
-          <div className="flex-shrink-0 p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 space-y-3">
-            {/* Search */}
-            <div className="relative">
-              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              <input
-                type="text"
-                placeholder="Search by patient ID, name, disease, stage, hospital..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
-              />
-            </div>
-
-            {/* Select All + Stats + Enroll in one row */}
-            <div className="flex items-center gap-3">
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={selectedPatients.size === filteredPatients.length && filteredPatients.length > 0}
-                  onChange={handleSelectAll}
-                  className="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                />
-                <span className="text-sm font-semibold text-blue-900 dark:text-blue-100">
-                  Select All ({filteredPatients.length})
-                </span>
-              </label>
-
-              <div className="flex-1 text-sm text-gray-500 dark:text-gray-400 text-center">
-                {filteredPatients.length} available{hospital && ' in this hospital'}
-              </div>
-
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }} onClick={handleClose} />
+          <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="relative z-10 w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-2xl shadow-2xl p-6 m-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-primary)' }} onClick={(e) => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-blue-600 dark:text-blue-400">
-                  {selectedPatients.size} selected
-                </span>
-                <Button
-                  onClick={handleEnroll}
-                  disabled={selectedPatients.size === 0 || enrolling}
-                  size="sm"
-                  className="gap-1"
-                >
-                  {enrolling ? (
-                    <>
-                      <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                      </svg>
-                      Enrolling...
-                    </>
-                  ) : (
-                    <>
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-                      </svg>
-                      Enroll {selectedPatients.size > 0 ? `${selectedPatients.size} ` : ''}
-                    </>
-                  )}
-                </Button>
+                <div className="w-1.5 h-6 rounded-full" style={{ background: 'var(--brand-primary)' }} />
+                <h3 className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>Manual Patient Eligibility Check</h3>
               </div>
+              <button onClick={handleClose} className="w-8 h-8 rounded-lg flex items-center justify-center transition" style={{ color: 'var(--text-tertiary)', background: 'var(--bg-tertiary)' }}>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
             </div>
 
-            {/* Message Display */}
-            {message && (
-              <div className={`p-3 rounded-lg text-sm ${
-                message.type === 'success' ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200 border border-green-300 dark:border-green-700' :
-                message.type === 'error' ? 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200 border border-red-300 dark:border-red-700' :
-                'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200 border border-yellow-300 dark:border-yellow-700'
-              }`}>
-                <div className="flex items-center justify-between">
-                  <span>{message.text}</span>
-                  <button onClick={() => setMessage(null)} className="ml-2 text-current opacity-70 hover:opacity-100">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
+            <p className="text-sm mb-4" style={{ color: 'var(--text-secondary)' }}>Trial: <strong>{trial?.drugName}</strong> — {trial?.disease || trial?.indication}</p>
+
+            {/* Input */}
+            <div className="flex gap-2 mb-4">
+              <input type="text" value={patientId} onChange={(e) => setPatientId(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleCheck()} placeholder="Enter Patient ID (e.g. PAT001)" className="input flex-1" />
+              <Button variant="primary" onClick={handleCheck} disabled={checking}>{checking ? 'Checking...' : 'Check'}</Button>
+            </div>
+
+            {error && <div className="p-3 rounded-lg text-sm mb-4" style={{ background: 'var(--status-error-bg)', color: 'var(--status-error)', border: '1px solid var(--status-error-border)' }}>{error}</div>}
+
+            {/* Result */}
+            {patient && (
+              <div className="space-y-4">
+                {/* Eligibility badge */}
+                <div className="p-4 rounded-xl text-center" style={{ background: patient.is_eligible ? 'var(--status-success-bg)' : 'var(--status-error-bg)', border: `2px solid ${patient.is_eligible ? 'var(--status-success)' : 'var(--status-error)'}` }}>
+                  <p className="text-2xl font-extrabold" style={{ color: patient.is_eligible ? 'var(--status-success)' : 'var(--status-error)' }}>{patient.is_eligible ? '✓ ELIGIBLE' : '✗ NOT ELIGIBLE'}</p>
+                </div>
+
+                {/* Patient details */}
+                <div className="rounded-lg overflow-hidden" style={{ border: '1px solid var(--border-primary)' }}>
+                  <div className="px-4 py-2 text-xs font-semibold uppercase tracking-wider" style={{ background: 'var(--bg-tertiary)', color: 'var(--text-tertiary)' }}>Patient Details</div>
+                  <div className="divide-y" style={{ borderColor: 'var(--border-primary)' }}>
+                    {[
+                      ['Patient ID', patient.patient_id],
+                      ['Name', patient.patient_name],
+                      ['Age', patient.age],
+                      ['Gender', patient.gender],
+                      ['Blood Group', patient.blood_group],
+                      ['Disease', patient.disease],
+                      ['Stage', patient.stage],
+                      ['BMI', patient.bmi],
+                      ['Hospital', patient.hospital_name],
+                      ['Comorbidities', Array.isArray(patient.comorbidities) ? patient.comorbidities.join(', ') : patient.comorbidities],
+                    ].filter(([, v]) => v != null && v !== '').map(([label, value]) => (
+                      <div key={label} className="flex justify-between px-4 py-2 text-sm">
+                        <span style={{ color: 'var(--text-tertiary)' }}>{label}</span>
+                        <span className="font-medium" style={{ color: 'var(--text-primary)' }}>{String(value)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Criteria match breakdown */}
+                <div className="rounded-lg overflow-hidden" style={{ border: '1px solid var(--border-primary)' }}>
+                  <div className="px-4 py-2 text-xs font-semibold uppercase tracking-wider" style={{ background: 'var(--bg-tertiary)', color: 'var(--text-tertiary)' }}>Criteria Match</div>
+                  <div className="divide-y" style={{ borderColor: 'var(--border-primary)' }}>
+                    {criteria.ageRange && (
+                      <div className="flex justify-between px-4 py-2 text-sm">
+                        <span style={{ color: 'var(--text-tertiary)' }}>Age ({criteria.ageRange[0]}–{criteria.ageRange[1]})</span>
+                        <span style={{ color: patient.age >= criteria.ageRange[0] && patient.age <= criteria.ageRange[1] ? 'var(--status-success)' : 'var(--status-error)' }}>{patient.age >= criteria.ageRange[0] && patient.age <= criteria.ageRange[1] ? '✓ Pass' : '✗ Fail'}</span>
+                      </div>
+                    )}
+                    {criteria.genders?.length > 0 && (
+                      <div className="flex justify-between px-4 py-2 text-sm">
+                        <span style={{ color: 'var(--text-tertiary)' }}>Gender ({criteria.genders.join(', ')})</span>
+                        <span style={{ color: criteria.genders.includes(patient.gender) ? 'var(--status-success)' : 'var(--status-error)' }}>{criteria.genders.includes(patient.gender) ? '✓ Pass' : '✗ Fail'}</span>
+                      </div>
+                    )}
+                    {criteria.bloodGroups?.length > 0 && (
+                      <div className="flex justify-between px-4 py-2 text-sm">
+                        <span style={{ color: 'var(--text-tertiary)' }}>Blood Group ({criteria.bloodGroups.join(', ')})</span>
+                        <span style={{ color: criteria.bloodGroups.includes(patient.blood_group) ? 'var(--status-success)' : 'var(--status-error)' }}>{criteria.bloodGroups.includes(patient.blood_group) ? '✓ Pass' : '✗ Fail'}</span>
+                      </div>
+                    )}
+                    {criteria.bmiRange && (
+                      <div className="flex justify-between px-4 py-2 text-sm">
+                        <span style={{ color: 'var(--text-tertiary)' }}>BMI ({criteria.bmiRange[0]}–{criteria.bmiRange[1]})</span>
+                        <span style={{ color: patient.bmi >= criteria.bmiRange[0] && patient.bmi <= criteria.bmiRange[1] ? 'var(--status-success)' : 'var(--status-error)' }}>{patient.bmi >= criteria.bmiRange[0] && patient.bmi <= criteria.bmiRange[1] ? '✓ Pass' : '✗ Fail'}</span>
+                      </div>
+                    )}
+                    {criteria.stages?.length > 0 && (
+                      <div className="flex justify-between px-4 py-2 text-sm">
+                        <span style={{ color: 'var(--text-tertiary)' }}>Stage ({criteria.stages.join(', ')})</span>
+                        <span style={{ color: criteria.stages.includes(patient.stage) ? 'var(--status-success)' : 'var(--status-error)' }}>{criteria.stages.includes(patient.stage) ? '✓ Pass' : '✗ Fail'}</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
-          </div>
-
-          {/* Scrollable Patient List */}
-          <div className="flex-1 overflow-y-auto min-h-0 p-4">
-            {loading ? (
-              <div className="flex items-center justify-center py-12">
-                <svg className="w-8 h-8 animate-spin text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-              </div>
-            ) : filteredPatients.length === 0 ? (
-              <div className="text-center py-12 text-gray-500 dark:text-gray-400">
-                {searchTerm 
-                  ? 'No patients match your search criteria' 
-                  : 'No available patients found for enrollment'}
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {/* Patient Checkboxes */}
-                {filteredPatients.map((patient) => (
-                  <label
-                    key={patient._oid}
-                    className="flex items-center gap-3 p-4 border border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedPatients.has(patient._oid)}
-                      onChange={() => handleTogglePatient(patient._oid)}
-                      className="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                    />
-                    <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
-                      <div>
-                        <div className="font-semibold text-gray-900 dark:text-white">
-                          {patient.patient_id}
-                        </div>
-                        <div className="text-gray-600 dark:text-gray-400">
-                          {patient.patient_name || 'N/A'}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-gray-600 dark:text-gray-400">Age / Gender</div>
-                        <div className="text-gray-900 dark:text-white">
-                          {patient.age} / {patient.gender}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-gray-600 dark:text-gray-400">Disease / Stage</div>
-                        <div className="text-gray-900 dark:text-white">
-                          {patient.disease} {patient.stage && `(${patient.stage})`}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-gray-600 dark:text-gray-400">Hospital</div>
-                        <div className="text-gray-900 dark:text-white truncate">
-                          {patient.hospital_name}
-                        </div>
-                      </div>
-                    </div>
-                  </label>
-                ))}
-              </div>
-            )}
-          </div>
-        </motion.div>
+          </motion.div>
         </div>
       )}
     </AnimatePresence>,
