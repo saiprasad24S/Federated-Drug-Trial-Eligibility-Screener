@@ -68,23 +68,10 @@ const Hero = ({ onCTAClick }) => {
         animate="visible"
         className="relative z-10 max-w-4xl mx-auto px-6 text-center"
       >
-        {/* Badge */}
-        <motion.div
-          variants={textVariants}
-          custom={0}
-          className={`inline-block mb-6 px-4 py-2 rounded-full border ${
-            isDark
-              ? 'border-cyan-500/50 bg-cyan-500/10 text-cyan-400'
-              : 'border-blue-400/50 bg-blue-50 text-blue-600'
-          }`}
-        >
-          <span className="text-sm font-medium">🚀 Next Generation Healthcare AI</span>
-        </motion.div>
-
         {/* Main Heading */}
         <motion.h1
           variants={textVariants}
-          custom={1}
+          custom={0}
           className={`text-5xl md:text-7xl font-bold mb-6 leading-tight ${
             isDark ? 'text-white' : 'text-slate-900'
           }`}
@@ -108,7 +95,7 @@ const Hero = ({ onCTAClick }) => {
         {/* Subheading */}
         <motion.p
           variants={textVariants}
-          custom={2}
+          custom={1}
           className={`text-lg md:text-xl mb-8 max-w-2xl mx-auto ${
             isDark ? 'text-slate-300' : 'text-slate-600'
           }`}
@@ -116,10 +103,9 @@ const Hero = ({ onCTAClick }) => {
           Privacy-preserving federated learning system for drug trial eligibility prediction with blockchain-based audit logging.
         </motion.p>
 
-        {/* CTA Buttons */}
         <motion.div
           variants={textVariants}
-          custom={3}
+          custom={2}
           className="flex flex-col sm:flex-row gap-4 justify-center"
         >
           <motion.button
@@ -151,7 +137,7 @@ const Hero = ({ onCTAClick }) => {
         {/* Stats */}
         <motion.div
           variants={textVariants}
-          custom={4}
+          custom={3}
           className="grid grid-cols-3 gap-8 mt-16 pt-8 border-t"
           style={{
             borderColor: isDark ? 'rgba(148, 163, 184, 0.2)' : 'rgba(203, 213, 225, 0.5)',
