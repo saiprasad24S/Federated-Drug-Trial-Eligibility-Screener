@@ -200,7 +200,7 @@ export default function LoginPage({ onLogin }) {
           </motion.div>
 
           <h1 className="text-5xl font-black tracking-tight leading-tight" style={{ color: 'var(--text-primary)' }}>
-            FDT<span style={{ color: 'var(--brand-accent)' }}>ES</span>
+            FEDTES
           </h1>
           <p className="text-lg font-medium mt-3 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
             Federated Drug Trial<br />Eligibility Screener
@@ -304,7 +304,7 @@ export default function LoginPage({ onLogin }) {
                   </svg>
                 </motion.div>
                 <h1 className="text-3xl font-black" style={{ color: 'var(--text-primary)' }}>
-                  FDT<span style={{ color: 'var(--brand-accent)' }}>ES</span>
+                  FEDTES
                 </h1>
                 <p className="text-sm mt-1" style={{ color: 'var(--text-tertiary)' }}>Federated Drug Trial Eligibility Screener</p>
               </div>
@@ -496,7 +496,7 @@ export default function LoginPage({ onLogin }) {
                     <span className="text-[10px] font-semibold" style={{ color: 'var(--text-tertiary)' }}>HIPAA Ready</span>
                   </div>
                 </div>
-                <p className="text-[10px]" style={{ color: 'var(--text-tertiary)', opacity: 0.6 }}>&copy; 2026 FDTES Platform. All rights reserved.</p>
+                <p className="text-[10px]" style={{ color: 'var(--text-tertiary)', opacity: 0.6 }}>&copy; 2026 FEDTES Platform. All rights reserved.</p>
               </div>
             </div>
           </div>

@@ -10,6 +10,7 @@ import { useBlockchainLogs } from './hooks/useBlockchainLogs';
 import { useThemeStore } from './stores/themeStore';
 import { pageTransition } from './utils/motionVariants';
 import { apiService } from './services/apiService';
+import LandingPage from './landing';
 
 const TABS = [
   { id: 'overview', label: 'Home', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0h4' },
@@ -27,6 +28,8 @@ function App() {
   });
   const [tabHistory, setTabHistory] = useState([]);
   const isDark = useThemeStore((s) => s.theme === 'dark');
+
+  const [authView, setAuthView] = useState('landing');
 
   const navigateTab = (tabId) => {
     if (tabId !== activeTab) {
@@ -54,6 +57,7 @@ function App() {
   const handleLogin = (userData) => {
     setUser(userData);
     setIsAuthenticated(true);
+    setAuthView('landing');
     try { localStorage.setItem('user', JSON.stringify(userData)); localStorage.setItem('isAuthenticated', '1'); } catch { /* ignore */ }
   };
 
@@ -68,6 +72,7 @@ function App() {
     setIsAuthenticated(false);
     setActiveTab('overview');
     setTabHistory([]);
+    setAuthView('landing');
   };
 
   useEffect(() => {
@@ -88,10 +93,33 @@ function App() {
     );
   }
 
+  // Show landing/login when not authenticated
   if (!isAuthenticated) {
     return (
       <ToastProvider>
-        <LoginPage onLogin={handleLogin} />
+        <AnimatePresence mode="wait">
+          {authView === 'landing' ? (
+            <motion.div key="landing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+              <LandingPage onLoginClick={() => setAuthView('login')} />
+            </motion.div>
+          ) : (
+            <motion.div key="login" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="relative">
+              <button
+                onClick={() => setAuthView('landing')}
+                className="fixed top-5 left-5 z-30 px-4 py-2 rounded-lg text-sm font-semibold"
+                style={{
+                  background: isDark ? 'rgba(15,23,42,0.7)' : 'rgba(255,255,255,0.75)',
+                  color: 'var(--text-primary)',
+                  border: '1px solid var(--border-primary)',
+                  backdropFilter: 'blur(10px)',
+                }}
+              >
+                Back
+              </button>
+              <LoginPage onLogin={handleLogin} />
+            </motion.div>
+          )}
+        </AnimatePresence>
       </ToastProvider>
     );
   }
@@ -136,7 +164,7 @@ function App() {
                   </div>
                   <div className="leading-tight text-left">
                     <h1 className="text-lg font-bold tracking-tight" style={{ color: 'var(--text-primary)' }}>
-                      FDT<span style={{ color: 'var(--brand-accent)' }}>ES</span>
+                      FEDTES
                     </h1>
                     <p className="text-[10px] font-medium tracking-wide uppercase" style={{ color: 'var(--text-tertiary)' }}>Drug Trial Eligibility Screener</p>
                   </div>

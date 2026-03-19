@@ -9,16 +9,16 @@
 
 :root,
 [data-theme='light'] {
-  /* Backgrounds — Genome Glass */
-  --bg-primary: #F6F3EF;
-  --bg-secondary: #F1ECE6;
-  --bg-tertiary: #F4EFE9;
+  /* Backgrounds — Clean Clinical Light */
+  --bg-primary: #F7FAFF;
+  --bg-secondary: #EEF3FA;
+  --bg-tertiary: #E8EEF7;
   --bg-card: #FFFFFF;
-  --bg-card-hover: #FFFCFA;
-  --bg-input: #FFFCFA;
-  --bg-header: #F6F3EF;
+  --bg-card-hover: #F8FBFF;
+  --bg-input: #F8FBFF;
+  --bg-header: #F7FAFF;
   --bg-header-solid: #FFFFFF;
-  --bg-login: linear-gradient(135deg, #F6F3EF 0%, #F2EEE8 55%, #F1ECE6 100%);
+  --bg-login: linear-gradient(135deg, #F7FAFF 0%, #EEF4FF 55%, #E7F0FF 100%);
   --bg-overlay: rgba(15, 12, 41, 0.45);
   --bg-hero-gradient: none;
 
@@ -37,8 +37,8 @@
   --brand-gradient-warm: linear-gradient(135deg, #2563EB, #60A5FA);
 
   /* Borders */
-  --border-primary: #E7E1DA;
-  --border-secondary: #DDD5CC;
+  --border-primary: #D7E1EF;
+  --border-secondary: #C6D3E4;
   --border-focus: #2563EB;
   --border-glow: 0 0 0 3px rgba(37, 99, 235, 0.25);
 
@@ -108,7 +108,7 @@
   --table-header-bg: linear-gradient(180deg, rgba(37,99,235,0.10), rgba(37,99,235,0.05));
   --table-header-bg-solid: rgba(37,99,235,0.08);
   --table-row-hover: rgba(37,99,235,0.07);
-  --table-border: #E7E1DA;
+  --table-border: #D7E1EF;
   --table-row-stripe: rgba(37,99,235,0.03);
 
   /* Scrollbar */
@@ -246,7 +246,7 @@ body {
 }
 
 [data-theme='light'] body {
-  background-color: #F6F3EF;
+  background-color: #F7FAFF;
   min-height: 100vh;
 }
 
@@ -274,7 +274,7 @@ body {
 [data-theme='light'] .glass-card {
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
-  border: 1px solid #E7E1DA;
+  border: 1px solid #D7E1EF;
   border-radius: 18px;
   box-shadow: 0 6px 18px rgba(15,23,42,0.06);
 }
@@ -290,9 +290,9 @@ body {
   border-color: var(--border-secondary);
 }
 [data-theme='light'] .glass-card:hover {
-  background: #FFFCFA;
+  background: #F8FBFF;
   box-shadow: 0 12px 28px rgba(15,23,42,0.10);
-  border-color: #E7E1DA;
+  border-color: #D7E1EF;
 }
 [data-theme='dark'] .glass-card:hover {
   border-color: #4B5563;
@@ -313,20 +313,20 @@ body {
 [data-theme='light'] .app-header {
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
-  background: #F6F3EF;
+  background: #F7FAFF;
 }
 
 [data-theme='light'] .page-content {
-  background: #F1ECE6;
+  background: transparent;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
-  border-radius: 24px;
-  padding: 28px;
+  border-radius: 0;
+  padding: 1.5rem 0;
 }
 [data-theme='dark'] .page-content {
-  background: #111827;
-  border-radius: 24px;
-  box-shadow: 0 25px 60px rgba(0,0,0,0.6);
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
 }
 [data-theme='dark'] .app-header {
   backdrop-filter: blur(16px) saturate(1.4);
@@ -488,10 +488,10 @@ body {
   background: rgba(37,99,235,0.08);
 }
 [data-theme='light'] .themed-table th {
-  border-bottom: 1px solid #E7E1DA;
+  border-bottom: 1px solid #D7E1EF;
 }
 [data-theme='light'] .themed-table tbody tr {
-  border-bottom: 1px solid #EFE8E0;
+  border-bottom: 1px solid #E4ECF6;
 }
 [data-theme='light'] .themed-table tbody tr:hover {
   background: rgba(37,99,235,0.06);
