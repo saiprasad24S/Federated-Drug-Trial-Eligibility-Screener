@@ -40,6 +40,31 @@ const AboutSection = () => {
               An interactive, role-based user interface provides clinicians and trial coordinators with seamless access to trial opportunities, eligibility analytics, and privacy status, enabling efficient, transparent, and scalable multi-institutional clinical research collaboration.
             </p>
           </div>
+
+          <div className={`mt-10 rounded-2xl p-6 border ${
+            isDark ? 'bg-slate-900/70 border-slate-700' : 'bg-white border-slate-200'
+          }`}>
+            <h3 className={`text-2xl font-bold mb-3 ${isDark ? 'text-white' : 'text-slate-900'}`}>
+              Our Team
+            </h3>
+            <p className={`${isDark ? 'text-slate-300' : 'text-slate-700'} mb-4`}>
+              Our team is focused on building secure, privacy-first healthcare intelligence systems that make clinical research collaboration faster, transparent, and scalable across institutions.
+            </p>
+            <div className="grid gap-3 sm:grid-cols-3">
+              {['Y B Sai Prasad', 'J R Vishweshwara Sai', 'U Nityam Kethan'].map((member) => (
+                <div
+                  key={member}
+                  className={`rounded-xl px-4 py-3 font-semibold border ${
+                    isDark
+                      ? 'bg-slate-800/70 border-slate-700 text-slate-100'
+                      : 'bg-slate-50 border-slate-200 text-slate-800'
+                  }`}
+                >
+                  {member}
+                </div>
+              ))}
+            </div>
+          </div>
         </motion.div>
       </div>
     </section>

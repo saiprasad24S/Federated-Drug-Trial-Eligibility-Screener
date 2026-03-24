@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { apiService } from '../services/apiService';
 import { Button, ThemeToggle } from './ui';
 import { useThemeStore } from '../stores/themeStore';
+import UniversalLogo from './UniversalLogo';
 
 /* ── Animated floating particles (enhanced) ── */
 const Particle = ({ delay, size, x, y, duration, color }) => (
@@ -191,12 +192,7 @@ export default function LoginPage({ onLogin }) {
             }}
             whileHover={{ scale: 1.05, rotate: 3 }}
           >
-            <svg className="w-10 h-10" style={{ color: 'var(--brand-accent)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <path d="M12 2v20" strokeWidth="2" strokeLinecap="round" />
-              <path d="M5 7h14" strokeWidth="1.5" strokeLinecap="round" />
-              <path d="M7 12h10" strokeWidth="1.5" strokeLinecap="round" />
-              <path d="M9 17h6" strokeWidth="1.5" strokeLinecap="round" />
-            </svg>
+            <UniversalLogo className="w-10 h-10" style={{ color: 'var(--brand-accent)' }} />
           </motion.div>
 
           <h1 className="text-5xl font-black tracking-tight leading-tight" style={{ color: 'var(--text-primary)' }}>
@@ -297,11 +293,7 @@ export default function LoginPage({ onLogin }) {
                   }}
                   whileHover={{ scale: 1.05, rotate: 5 }}
                 >
-                  <svg className="w-8 h-8" style={{ color: 'var(--brand-accent)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                    <path d="M12 2v20" strokeWidth="2" strokeLinecap="round" />
-                    <path d="M5 7h14" strokeWidth="1.5" strokeLinecap="round" />
-                    <path d="M7 12h10" strokeWidth="1.5" strokeLinecap="round" />
-                  </svg>
+                  <UniversalLogo className="w-8 h-8" style={{ color: 'var(--brand-accent)' }} />
                 </motion.div>
                 <h1 className="text-3xl font-black" style={{ color: 'var(--text-primary)' }}>
                   FEDTES

@@ -222,7 +222,7 @@
    BASE STYLES
    ================================================================ */
 * {
-  transition: var(--transition-theme);
+  transition: none;
 }
 
 canvas, video, iframe, img, svg path, svg circle, svg rect,

@@ -11,6 +11,7 @@ import { useThemeStore } from './stores/themeStore';
 import { pageTransition } from './utils/motionVariants';
 import { apiService } from './services/apiService';
 import LandingPage from './landing';
+import UniversalLogo from './components/UniversalLogo';
 
 const TABS = [
   { id: 'overview', label: 'Home', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0h4' },
@@ -156,11 +157,7 @@ function App() {
                   title="Go to Home"
                 >
                   <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: isDark ? 'linear-gradient(135deg, rgba(32,227,178,0.14), rgba(77,171,247,0.1))' : 'linear-gradient(135deg, rgba(37,99,235,0.12), rgba(34,197,94,0.08))', border: `1px solid ${isDark ? 'rgba(32,227,178,0.2)' : 'rgba(37,99,235,0.16)'}` }}>
-                    <svg className="w-5 h-5" style={{ color: 'var(--brand-accent)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                      <path d="M12 2v20" strokeWidth="2" strokeLinecap="round" />
-                      <path d="M5 7h14" strokeWidth="1.5" strokeLinecap="round" />
-                      <path d="M7 12h10" strokeWidth="1.5" strokeLinecap="round" />
-                    </svg>
+                    <UniversalLogo className="w-5 h-5" style={{ color: 'var(--brand-accent)' }} />
                   </div>
                   <div className="leading-tight text-left">
                     <h1 className="text-lg font-bold tracking-tight" style={{ color: 'var(--text-primary)' }}>

@@ -1,6 +1,32 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+function resolveApiBaseUrl() {
+  const envBase = (import.meta.env.VITE_API_BASE_URL || '').trim();
+  const pageHost = typeof window !== 'undefined' ? window.location.hostname : '';
+  const isLanClient = pageHost && pageHost !== 'localhost' && pageHost !== '127.0.0.1';
+
+  if (envBase) {
+    try {
+      const parsed = new URL(envBase);
+      const isLocalApiHost = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
+      if (isLanClient && isLocalApiHost) {
+        const port = parsed.port || '8001';
+        return `${parsed.protocol}//${pageHost}:${port}`;
+      }
+      return envBase;
+    } catch {
+      // Fall through to computed default when env value is malformed.
+    }
+  }
+
+  if (isLanClient) {
+    return `http://${pageHost}:8001`;
+  }
+
+  return 'http://localhost:8001';
+}
+
+const API_BASE_URL = resolveApiBaseUrl();
 
 export const apiService = {
   // Login to the backend (MongoDB-backed authentication)

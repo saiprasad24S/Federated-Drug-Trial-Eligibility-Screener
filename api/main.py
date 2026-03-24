@@ -342,6 +342,7 @@ async def get_stats(hospital: Optional[str] = None):
     try:
         stats = await db.get_patient_stats(hospital_name=hospital)
         trials = await db.get_trials_from_db()
+        hospitals = await db.get_hospitals()
         hospital_counts = await db.get_hospital_patient_counts()
 
         _log_audit(
@@ -355,7 +356,7 @@ async def get_stats(hospital: Optional[str] = None):
             "total_patients": stats.get("total_patients", 0),
             "global_total_patients": stats.get("global_total_patients", 0),
             "total_trials": sum(1 for t in trials if t.get("status", "").lower() == "active"),
-            "total_hospitals": len(hospital_counts) or 3,
+            "total_hospitals": len(hospitals) or 3,
             "unique_diseases": stats.get("unique_diseases", 0),
             "drug_trials": len(trials),
             "avg_success_rate": 65.7,

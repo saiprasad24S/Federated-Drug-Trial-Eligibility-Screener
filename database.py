@@ -74,7 +74,12 @@ def ensure_indexes():
     """Create indexes for fast queries."""
     db = get_sync_db()
     try:
-        db.patients.create_index([("patient_id", ASCENDING)], unique=False)
+        # Ensure patient_id is globally unique; drop legacy non-unique index first.
+        patient_indexes = db.patients.index_information()
+        pid_idx = patient_indexes.get("patient_id_1")
+        if pid_idx and not pid_idx.get("unique", False):
+            db.patients.drop_index("patient_id_1")
+        db.patients.create_index([("patient_id", ASCENDING)], unique=True)
         db.patients.create_index([("disease", ASCENDING)])
         db.patients.create_index([("age", ASCENDING)])
         db.patients.create_index([("gender", ASCENDING)])
@@ -491,8 +496,23 @@ async def insert_patients(patients: List[dict], hospital_name: str = None) -> in
         p.pop("_id", None)
         if hospital_name:
             p["hospital_name"] = hospital_name
-    result = await db.patients.insert_many(patients, ordered=False)
-    return len(result.inserted_ids)
+    try:
+        result = await db.patients.insert_many(patients, ordered=False)
+        return len(result.inserted_ids)
+    except BulkWriteError as bwe:
+        details = bwe.details or {}
+        inserted = int(details.get("nInserted", 0))
+        write_errors = details.get("writeErrors", [])
+        non_dup_errors = [e for e in write_errors if e.get("code") != 11000]
+        if non_dup_errors:
+            raise
+
+        skipped = len(write_errors)
+        if skipped > 0:
+            logger.warning(
+                f"Skipped {skipped} duplicate patient_id records during insert"
+            )
+        return inserted
 
 
 async def get_patient_stats(hospital_name: str = None) -> Dict[str, Any]:

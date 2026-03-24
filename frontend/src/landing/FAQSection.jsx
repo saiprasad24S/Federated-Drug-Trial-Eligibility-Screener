@@ -23,6 +23,26 @@ const FAQS = [
     q: 'Is FEDTES suitable for multi-hospital scaling?',
     a: 'Yes. The architecture is designed for decentralized collaboration, allowing multiple institutions to join and improve predictive performance over time.',
   },
+  {
+    q: 'How are eligibility decisions generated?',
+    a: 'Eligibility is determined using configured trial criteria and model-assisted analysis on local hospital records, followed by transparent reporting in the dashboard.',
+  },
+  {
+    q: 'Who can access the FEDTES dashboard?',
+    a: 'FEDTES uses role-based access for clinicians and trial coordinators. Users only see data they are authorized to view in their institution context.',
+  },
+  {
+    q: 'Can hospitals upload and manage their own patient datasets?',
+    a: 'Yes. Each hospital can upload and maintain its own records securely, and those records remain local while federated intelligence is shared safely.',
+  },
+  {
+    q: 'How does FEDTES support regulatory compliance?',
+    a: 'The platform combines privacy-preserving federated workflows with blockchain audit trails to provide traceability, integrity, and compliance-friendly evidence.',
+  },
+  {
+    q: 'Does FEDTES support trial analytics in real time?',
+    a: 'Yes. FEDTES provides live insights for trial opportunities, eligibility trends, and participation metrics through its interactive dashboards.',
+  },
 ];
 
 const FAQSection = () => {

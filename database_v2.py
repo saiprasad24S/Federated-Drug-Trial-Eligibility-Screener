@@ -78,7 +78,12 @@ def ensure_indexes_v2() -> None:
     """Create indexes for v2 collections."""
     db = get_sync_db()
     try:
-        db.patients.create_index([("patient_id", ASCENDING)], unique=False)
+        # Ensure patient_id is globally unique; drop legacy non-unique index first.
+        patient_indexes = db.patients.index_information()
+        pid_idx = patient_indexes.get("patient_id_1")
+        if pid_idx and not pid_idx.get("unique", False):
+            db.patients.drop_index("patient_id_1")
+        db.patients.create_index([("patient_id", ASCENDING)], unique=True)
         db.patients.create_index([("disease", ASCENDING)])
         db.patients.create_index([("age", ASCENDING)])
         db.patients.create_index([("gender", ASCENDING)])

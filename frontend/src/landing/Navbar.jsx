@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { ThemeToggle } from '../components/ui';
 import { useThemeStore } from '../stores/themeStore';
+import UniversalLogo from '../components/UniversalLogo';
 
 const Navbar = ({ onLoginClick }) => {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -38,7 +39,7 @@ const Navbar = ({ onLoginClick }) => {
           className="flex items-center gap-3"
         >
           <div className={`w-10 h-10 rounded-lg bg-gradient-to-br from-blue-400 to-cyan-400 flex items-center justify-center ${isDark ? 'shadow-lg shadow-cyan-500/50' : ''}`}>
-            <span className="text-white font-bold text-lg">F</span>
+            <UniversalLogo className="w-5 h-5" style={{ color: '#fff' }} />
           </div>
           <div className="flex flex-col">
             <span className={`font-bold text-lg ${isDark ? 'text-white' : 'text-slate-900'}`}>FEDTES</span>

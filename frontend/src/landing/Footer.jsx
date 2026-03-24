@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { useThemeStore } from '../stores/themeStore';
+import UniversalLogo from '../components/UniversalLogo';
 
 const Footer = () => {
   const isDark = useThemeStore((s) => s.theme === 'dark');
@@ -10,10 +11,10 @@ const Footer = () => {
     Company: ['About', 'Blog', 'Careers', 'Contact'],
     Legal: ['Privacy', 'Terms', 'Cookie Policy', 'Compliance'],
     Social: [
-      { name: 'Twitter', icon: '𝕏' },
-      { name: 'LinkedIn', icon: '💼' },
-      { name: 'GitHub', icon: '🐙' },
-      { name: 'Email', icon: '✉️' },
+      { name: 'Twitter', icon: '𝕏', href: 'https://x.com' },
+      { name: 'LinkedIn', icon: '💼', href: 'https://www.linkedin.com' },
+      { name: 'GitHub', icon: '🐙', href: 'https://github.com/saiprasad24S' },
+      { name: 'Email', icon: '✉️', href: 'mailto:ybsaiprasad@gmail.com' },
     ],
   };
 
@@ -58,7 +59,7 @@ const Footer = () => {
           <motion.div variants={itemVariants} className="md:col-span-1">
             <div className="flex items-center gap-3 mb-4">
               <div className={`w-10 h-10 rounded-lg bg-gradient-to-br from-blue-400 to-cyan-400 flex items-center justify-center ${isDark ? 'shadow-lg shadow-cyan-500/50' : 'shadow-lg'}`}>
-                <span className="text-white font-bold">F</span>
+                <UniversalLogo className="w-5 h-5" style={{ color: '#fff' }} />
               </div>
               <span className="text-white font-bold text-lg">FEDTES</span>
             </div>
@@ -97,7 +98,9 @@ const Footer = () => {
               {links.Social.map((social) => (
                 <motion.a
                   key={social.name}
-                  href="#"
+                  href={social.href}
+                  target={social.href.startsWith('http') ? '_blank' : undefined}
+                  rel={social.href.startsWith('http') ? 'noreferrer' : undefined}
                   whileHover={{ scale: 1.2, y: -5 }}
                   title={social.name}
                   className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all ${
